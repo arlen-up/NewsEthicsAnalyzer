@@ -6,43 +6,18 @@ from openai import OpenAI
 import json
 import requests # 🌐 구글 클라우드 대신 인터넷 통신으로 데이터를 보냅니다.
 
-# --- 0. 스타일 및 디자인 세팅 (실시간 서버 한글 폰트 강제 주입) ---
+# --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단) ---
 import matplotlib as mpl
-import matplotlib.font_manager as fm
-import os
-
-# 스트림릿 리눅스 서버용 나눔 고딕 다운로드 꼼수 적용
-@st.cache_resource
-def load_korean_font():
-    # 인터넷 주소에서 나눔고딕 폰트 파일을 직접 다운로드합니다.
-    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-    font_path = "./NanumGothic.ttf"
-    if not os.path.exists(font_path):
-        import requests
-        res = requests.get(font_url)
-        with open(font_path, "wb") as f:
-            f.write(res.content)
-    # 다운로드한 폰트를 Matplotlib 시스템에 등록합니다.
-    fm.font_manager.addfont(font_path)
-    return fm.FontProperties(fname=font_path).get_name()
-
-try:
-    korean_font_name = load_korean_font()
-    mpl.rcParams['font.family'] = korean_font_name
-except Exception:
-    mpl.rcParams['font.family'] = 'sans-serif'
-
+mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['axes.unicode_minus'] = False
-sns.set_theme(style="whitegrid", font=mpl.rcParams['font.family'])
+sns.set_theme(style="whitegrid")
 
 # --- 🛠️ 구글 클라우드 없이 시트에 데이터 전송하는 함수 ---
 def save_data_without_google_cloud(headline, source, bias_risk, clickbait_risk, feedback):
     """구글 양식(Google Forms) 기술을 이용해 시트에 완전 무료/무인증으로 저장하는 함수"""
     try:
-        # 스트림릿 시크릿에서 구글 폼 양식 주소를 가져옵니다.
         form_url = st.secrets["google_form"]["url"]
         
-        # 구글 시트와 연결된 입력 칸들의 고유 ID와 매칭합니다.
         data = {
             st.secrets["google_form"]["entry_headline"]: headline,
             st.secrets["google_form"]["entry_source"]: source,
@@ -50,7 +25,6 @@ def save_data_without_google_cloud(headline, source, bias_risk, clickbait_risk, 
             st.secrets["google_form"]["entry_clickbait"]: str(clickbait_risk),
             st.secrets["google_form"]["entry_feedback"]: feedback
         }
-        # 데이터를 구글 서버로 전송합니다 (인증키 불필요!)
         requests.post(form_url, data=data)
         return True
     except Exception as e:
@@ -151,18 +125,21 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 2층: 데이터 테이블
+    # 2층: 데이터 테이블 (width='stretch' 스펙 반영 🛠️)
     st.subheader("📋 실시간 뉴스 균형 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 확인 대기'))
-    st.dataframe(result_df[['언론사/출처', '뉴스 헤드라인', '시선 왜곡도', '제목 자극성', '감성 판정', '유저 피드백']], use_container_width=True, hide_index=True)
+    st.dataframe(
+        result_df[['언론사/출처', '뉴스 헤드라인', '시선 왜곡도', '제목 자극성', '감성 판정', '유저 피드백']], 
+        width='stretch', 
+        hide_index=True
+    )
 
     st.markdown("---")
 
-    # 3층: 통계 그래프 (한글 깨짐 절대 방어 치트키 버전)
+    # 3층: 통계 그래프 (한글 절대 방어 치트키 적용 구역)
     st.subheader("📊 매체별 시선 편향 및 자극성 성향")
     
-    # 1. 인터넷에서 나눔고딕 폰트 파일을 강제로 다운로드하여 경로를 확보합니다.
-    import os, requests
+    import os
     import matplotlib.font_manager as fm
     
     font_path = "./NanumGothic.ttf"
@@ -172,21 +149,17 @@ if st.session_state.analytics_history:
         with open(font_path, "wb") as f:
             f.write(res.content)
             
-    # 2. 다운로드한 폰트 파일로 직접 FontProperties 오브젝트를 생성합니다 (핵심 ⭐)
     k_font = fm.FontProperties(fname=font_path)
-
     fig, axes = plt.subplots(1, 2, figsize=(15, 5)) 
     
     # --- 왼쪽 그래프: 왜곡도 ---
     media_bias = result_df.groupby('언론사/출처')['시선 왜곡도'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='시선 왜곡도', data=media_bias, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
     
-    # 글자가 들어가는 모든 요소에 fontproperties=k_font 를 억지로 쑤셔 넣습니다.
     axes[0].set_title('신문사별 평균 시선 왜곡도 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
     axes[0].set_ylabel('왜곡 점수 (1~10)', fontproperties=k_font, fontsize=11)
     axes[0].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
     axes[0].set_ylim(0, 10)
-    # X축에 들어가는 신문사 이름(예: 네이버, OO일보) 글씨 깨짐 방지
     for tick in axes[0].get_xticklabels():
         tick.set_fontproperties(k_font)
         tick.set_fontsize(10)
@@ -195,18 +168,18 @@ if st.session_state.analytics_history:
     media_bait = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='제목 자극성', data=media_bait, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
     
-    # 여기도 모든 텍스트에 fontproperties=k_font 를 강제 적용합니다.
     axes[1].set_title('신문사별 평균 제목 자극성 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
     axes[1].set_ylabel('자극 점수 (1~10)', fontproperties=k_font, fontsize=11)
     axes[1].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
     axes[1].set_ylim(0, 10)
-    # X축에 들어가는 신문사 이름 글씨 깨짐 방지
     for tick in axes[1].get_xticklabels():
         tick.set_fontproperties(k_font)
         tick.set_fontsize(10)
     
     plt.tight_layout()
     st.pyplot(fig)
+
+    st.markdown("---")
 
     # 4층: 정밀 보고서 및 구글 전송 트리거
     st.subheader("🕵️‍♂️ AI 미디어 가이드의 정밀 진단 소견")
