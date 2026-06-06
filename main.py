@@ -17,9 +17,11 @@ sns.set_theme(style="whitegrid")
 def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
     """유저 피드백 발생 시 깃허브 레포지토리의 data.csv 파일을 갱신하는 함수"""
     try:
-        # 스트림릿 Secrets에서 깃허브 정보 가져오기
+        # 🚨 실행 시작을 로그에 강제 인쇄
+        print("====== 깃허브 전송 함수 시작 ======")
+        
         GITHUB_TOKEN = st.secrets["github"]["token"]
-        REPO_NAME = st.secrets["github"]["repo"] # 예: "내아이디/레포이름"
+        REPO_NAME = st.secrets["github"]["repo"]
         FILE_PATH = "data.csv"
         
         url = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
@@ -28,36 +30,32 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
             "Accept": "application/vnd.github.v3+json"
         }
         
-        # 1. 기존에 저장된 CSV 파일이 있는지 확인 및 가져오기
         res = requests.get(url, headers=headers)
+        print(f"[1단계: 기존파일 조회 결과] Status Code: {res.status_code}")
+        
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         new_row = pd.DataFrame([{
             "날짜": current_time, "뉴스 제목": headline, "신문사": source, 
             "시선 왜곡도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback
         }])
         
+        import io
         if res.status_code == 200:
-            # 기존 파일이 존재하면 내용을 다운로드하여 합치기
             file_data = res.json()
             sha = file_data["sha"]
             from base64 import b64decode, b64encode
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
-            
-            # 기존 데이터 읽기
-            import io
             old_df = pd.read_csv(io.StringIO(existing_content))
             updated_df = pd.concat([old_df, new_row], ignore_index=True)
         else:
-            # 파일이 아예 없으면 새로 만들기
             sha = None
             updated_df = new_row
             
-        # 2. CSV 문자열로 변환 (한글 깨짐 방지 utf-8-sig)
         csv_buffer = io.StringIO()
         updated_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+        from base64 import b64encode
         content_encoded = b64encode(csv_buffer.getvalue().encode("utf-8-sig")).decode("utf-8")
         
-        # 3. 깃허브에 푸시(Commit) 보내기
         put_data = {
             "message": "🔥 시스템 실시간 뉴스 데이터 누적 피드백 기록",
             "content": content_encoded
@@ -65,10 +63,21 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         if sha:
             put_data["sha"] = sha
             
-        requests.put(url, headers=headers, json=put_data)
-        return True
+        # 🚨 실제 데이터를 전송하는 순간
+        put_res = requests.put(url, headers=headers, json=put_data)
+        print(f"[2단계: 최종 파일 업로드 결과] Status Code: {put_res.status_code}")
+        print(f"[2단계: 서버 응답 메시지] {put_res.text}")
+        
+        if put_res.status_code in [200, 201]:
+            st.toast("🎉 깃허브에 데이터가 성공적으로 적재되었습니다!")
+            return True
+        else:
+            st.error(f"❌ 깃허브 전송 실패! 에러코드: {put_res.status_code}")
+            return False
+            
     except Exception as e:
         print(f"[GitHub Sync Error] {str(e)}")
+        st.error(f"💥 시스템 에러 발생: {str(e)}")
         return False
 
 # --- 1. 미디어 균형 분석 GPT 엔진 ---
