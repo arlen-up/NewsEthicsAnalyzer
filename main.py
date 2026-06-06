@@ -6,6 +6,7 @@ from openai import OpenAI
 import json
 import requests
 from datetime import datetime
+import io
 
 # --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단) ---
 import matplotlib as mpl
@@ -29,16 +30,16 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         
         res = requests.get(url, headers=headers)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         new_row = pd.DataFrame([{
             "날짜": current_time, "뉴스 제목": headline, "신문사": source, 
             "시선 편향도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback
         }])
         
-        import io
         if res.status_code == 200:
             file_data = res.json()
             sha = file_data["sha"]
-            from base64 import b64decode, b64encode
+            from base64 import b64decode
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
             
             old_df = pd.read_csv(io.StringIO(existing_content))
@@ -65,21 +66,30 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         print(f"[GitHub Sync Error] {str(e)}")
         return False
 
-# --- 1. 미디어 균형 분석 GPT 엔진 ---
+# --- 1. 미디어 균형 분석 및 오타 자동 정제 GPT 엔진 ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
 
     def analyze_with_gpt(self, headline, source):
+        # 💡 뉴스 헤드라인 오타 자동 정제 지침을 프롬프트에 추가했습니다!
         prompt = f"""
-        당신은 사용자가 미디어의 홍수 속에서 '생각의 중심'을 잡도록 돕는 독창적이고 날카로운 미디어 밸런스 가이드입니다.
-        다음 뉴스 헤드라인과 언론사 정보가 사용자의 '시선'을 특정 방향으로 편향되게 만들거나, 포털 알고리즘을 한쪽으로 치우치게 만들 위험이 있는지 분석하여 JSON 형식으로 응답하세요.
+        당신은 사용자가 미디어의 홍수 속에서 '생각의 중심'을 잡도록 돕는 독창적이고 날카로운 미디어 밸런스 가이드이자, 한국어 뉴스 텍스트 정제 전문가입니다.
         
-        [뉴스 헤드라인]: "{headline}"
-        [언론사/출처]: "{source}"
+        [임무 1: 신문사 및 뉴스 헤드라인 오타 자동 정제]
+        1. 사용자가 입력한 [언론사/출처] 문구에 오타, 탈자, 조사, 혹은 파편화된 자모음(예: 한겨ㅈ래, 한결레, 네이바, 조선 일보 등)이 있다면 대한민국 표준 언론사 명칭(예: 한겨레신문, 네이버, 조선일보)으로 알아서 교정하세요.
+        2. 사용자가 입력한 [뉴스 헤드라인] 문구에 오타, 띄어쓰기 오류, 오타성 자모음(예: 백신ㄴ, 대툥령 등)이 있다면 문맥을 고려하여 올바른 한국어 표준 문장 및 단어로 깔끔하게 교정하세요.
+
+        [임무 2: 미디어 프레임 분석]
+        정제된 뉴스 헤드라인이 사용자의 '시선'을 특정 방향으로 편향되게 만들거나, 포털 알고리즘을 한쪽으로 치우치게 만들 위험이 있는지 분석하여 JSON 형식으로 응답하세요.
+        
+        [뉴스 헤드라인 (오타 포함 가능)]: "{headline}"
+        [언론사/출처 (오타 포함 가능)]: "{source}"
         
         [응답 형식 (JSON)]:
         {{
+            "cleaned_source": "오타와 띄어쓰기가 완벽히 교정된 표준 언론사 명칭 (예: 한겨레신문, 조선일보, 네이버)",
+            "cleaned_headline": "오타 및 맞춤법이 완벽히 교정된 깨끗한 뉴스 제목",
             "sentiment_score": -1.0에서 1.0 사이의 실수,
             "bias_risk": 1에서 10 사이의 정수 (시선 편향도),
             "clickbait_risk": 1에서 10 사이의 정수 (제목 자극성),
@@ -92,11 +102,12 @@ class AdvancedEthicsAnalyzer:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.85 
+                temperature=0.3 # 💡 오타 교정의 정확도를 극대화하기 위해 낮은 온도를 유지합니다.
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
             return {
+                "cleaned_source": source, "cleaned_headline": headline,
                 "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, 
                 "detailed_reason": f"분석 중 오류 발생: {str(e)}", "one_line_summary": "⚠️ 분석 실패"
             }
@@ -124,6 +135,17 @@ with st.sidebar:
         input_headline = st.text_input("📝 뉴스 제목 입력")
         input_source = st.text_input("🏢 신문사 / 출처")
         submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
+    
+    st.markdown("---")
+    st.header("📊 진단 지표 평가 기준")
+    metrics_data = {
+        "점수 범위": ["1 ~ 3점", "4 ~ 7점", "8 ~ 10점"],
+        "시선 편향도 상태": ["🟢 객관적 / 중립적", "🟡 부분 프레임 작동", "🔴 특정 진영/시각 편중"],
+        "제목 자극성 상태": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성 / 감정 선동"]
+    }
+    metrics_df = pd.DataFrame(metrics_data)
+    st.table(metrics_df)
+    st.caption("※ 본 지표는 GPT-4o 분석 엔진 기반의 미디어 언어 프레임 검구 결과치입니다.")
 
 if submit_button:
     if not input_headline or not input_source:
@@ -133,8 +155,12 @@ if submit_button:
         with st.spinner("⚖️ AI가 뉴스를 진단 중입니다..."):
             gpt_res = analyzer.analyze_with_gpt(input_headline, input_source)
             
+            # GPT가 완벽하게 정제해 준 신문사 이름과 뉴스 제목을 가져옵니다 ⭐
+            ai_cleaned_source = gpt_res.get('cleaned_source', input_source)
+            ai_cleaned_headline = gpt_res.get('cleaned_headline', input_headline)
+            
             new_record = {
-                '뉴스 헤드라인': input_headline, '언론사/출처': input_source,
+                '뉴스 헤드라인': ai_cleaned_headline, '언론사/출처': ai_cleaned_source,
                 '감성 점수': gpt_res['sentiment_score'], '시선 편향도': gpt_res['bias_risk'], 
                 '제목 자극성': gpt_res['clickbait_risk'], 'AI 미디어 가이드의 분석 소견': gpt_res['detailed_reason'],
                 '추천 피드 오염 위험 요약': gpt_res['one_line_summary'],
