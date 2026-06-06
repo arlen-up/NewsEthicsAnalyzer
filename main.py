@@ -6,12 +6,34 @@ from openai import OpenAI
 import json
 import requests # 🌐 구글 클라우드 대신 인터넷 통신으로 데이터를 보냅니다.
 
-# --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단 수정) ---
+# --- 0. 스타일 및 디자인 세팅 (실시간 서버 한글 폰트 강제 주입) ---
 import matplotlib as mpl
-# 스트림릿 리눅스 서버 환경에서 DejaVu Sans 폰트 경고가 뜨지 않도록 기본 무폰트 세팅을 강제합니다.
-mpl.rcParams['font.family'] = 'sans-serif'
+import matplotlib.font_manager as fm
+import os
+
+# 스트림릿 리눅스 서버용 나눔 고딕 다운로드 꼼수 적용
+@st.cache_resource
+def load_korean_font():
+    # 인터넷 주소에서 나눔고딕 폰트 파일을 직접 다운로드합니다.
+    font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+    font_path = "./NanumGothic.ttf"
+    if not os.path.exists(font_path):
+        import requests
+        res = requests.get(font_url)
+        with open(font_path, "wb") as f:
+            f.write(res.content)
+    # 다운로드한 폰트를 Matplotlib 시스템에 등록합니다.
+    fm.font_manager.addfont(font_path)
+    return fm.FontProperties(fname=font_path).get_name()
+
+try:
+    korean_font_name = load_korean_font()
+    mpl.rcParams['font.family'] = korean_font_name
+except Exception:
+    mpl.rcParams['font.family'] = 'sans-serif'
+
 mpl.rcParams['axes.unicode_minus'] = False
-sns.set_theme(style="whitegrid")
+sns.set_theme(style="whitegrid", font=mpl.rcParams['font.family'])
 
 # --- 🛠️ 구글 클라우드 없이 시트에 데이터 전송하는 함수 ---
 def save_data_without_google_cloud(headline, source, bias_risk, clickbait_risk, feedback):
