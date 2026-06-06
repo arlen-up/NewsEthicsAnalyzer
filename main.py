@@ -239,13 +239,21 @@ if st.session_state.analytics_history:
                         if st.button("👍 공감해요", key=f"like_{original_idx}"):
                             st.session_state.feedback_dict[headline_key] = "👍 공감함"
                             with st.spinner("깃허브 저장소에 데이터 동기화 중..."):
-                                save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👍 공감함")
+                                success = save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👍 공감함")
+                                if success:
+                                    st.success("✅ 저장 완료!")
+                                    import time
+                                    time.sleep(1) # ⏳ 데이터가 전송될 물리적인 시간을 벌어줍니다.
                             st.rerun()
                     with col_f2:
                         if st.button("👎 글쎄요", key=f"dislike_{original_idx}"):
                             st.session_state.feedback_dict[headline_key] = "👎 동의 안 함"
                             with st.spinner("깃허브 저장소에 데이터 동기화 중..."):
-                                save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👎 동의 안 함")
+                                success = save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👎 동의 안 함")
+                                if success:
+                                    st.success("✅ 저장 완료!")
+                                    import time
+                                    time.sleep(1) # ⏳ 데이터가 전송될 물리적인 시간을 벌어줍니다.
                             st.rerun()
                 else:
                     st.success(f"참여 완료: {current_feedback}")
