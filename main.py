@@ -158,26 +158,55 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 3층: 통계 그래프 (폰트 에러 유발 요소 완전 배제 및 수정)
+    # 3층: 통계 그래프 (한글 깨짐 절대 방어 치트키 버전)
     st.subheader("📊 매체별 시선 편향 및 자극성 성향")
+    
+    # 1. 인터넷에서 나눔고딕 폰트 파일을 강제로 다운로드하여 경로를 확보합니다.
+    import os, requests
+    import matplotlib.font_manager as fm
+    
+    font_path = "./NanumGothic.ttf"
+    if not os.path.exists(font_path):
+        font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
+        res = requests.get(font_url)
+        with open(font_path, "wb") as f:
+            f.write(res.content)
+            
+    # 2. 다운로드한 폰트 파일로 직접 FontProperties 오브젝트를 생성합니다 (핵심 ⭐)
+    k_font = fm.FontProperties(fname=font_path)
+
     fig, axes = plt.subplots(1, 2, figsize=(15, 5)) 
     
+    # --- 왼쪽 그래프: 왜곡도 ---
     media_bias = result_df.groupby('언론사/출처')['시선 왜곡도'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='시선 왜곡도', data=media_bias, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
-    # 제목에서 이모지(🔶)를 빼고 깨끗한 한글만 지정하여 폰트 에러를 완전히 차단합니다.
-    axes[0].set_title('신문사별 평균 시선 왜곡도 (1-10)', fontsize=12, fontweight='bold')
+    
+    # 글자가 들어가는 모든 요소에 fontproperties=k_font 를 억지로 쑤셔 넣습니다.
+    axes[0].set_title('신문사별 평균 시선 왜곡도 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
+    axes[0].set_ylabel('왜곡 점수 (1~10)', fontproperties=k_font, fontsize=11)
+    axes[0].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
     axes[0].set_ylim(0, 10)
+    # X축에 들어가는 신문사 이름(예: 네이버, OO일보) 글씨 깨짐 방지
+    for tick in axes[0].get_xticklabels():
+        tick.set_fontproperties(k_font)
+        tick.set_fontsize(10)
 
+    # --- 오른쪽 그래프: 자극성 ---
     media_bait = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='제목 자극성', data=media_bait, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
-    # 제목에서 이모지(🎣)를 빼고 깨끗한 한글만 지정하여 폰트 에러를 완전히 차단합니다.
-    axes[1].set_title('신문사별 평균 제목 자극성 (1-10)', fontsize=12, fontweight='bold')
+    
+    # 여기도 모든 텍스트에 fontproperties=k_font 를 강제 적용합니다.
+    axes[1].set_title('신문사별 평균 제목 자극성 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
+    axes[1].set_ylabel('자극 점수 (1~10)', fontproperties=k_font, fontsize=11)
+    axes[1].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
     axes[1].set_ylim(0, 10)
+    # X축에 들어가는 신문사 이름 글씨 깨짐 방지
+    for tick in axes[1].get_xticklabels():
+        tick.set_fontproperties(k_font)
+        tick.set_fontsize(10)
     
     plt.tight_layout()
     st.pyplot(fig)
-
-    st.markdown("---")
 
     # 4층: 정밀 보고서 및 구글 전송 트리거
     st.subheader("🕵️‍♂️ AI 미디어 가이드의 정밀 진단 소견")
