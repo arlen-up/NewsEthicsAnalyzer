@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from openai import OpenAI
 import json
-import requests # 🌐 구글 클라우드 대신 인터넷 통신으로 데이터를 보냅니다.
+import requests
+from datetime import datetime
 
 # --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단) ---
 import matplotlib as mpl
@@ -12,26 +13,65 @@ mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="whitegrid")
 
-# --- 🛠️ 구글 클라우드 없이 시트에 데이터 전송하는 함수 ---
-def save_data_without_google_cloud(headline, source, bias_risk, clickbait_risk, feedback):
-    """구글 양식(Google Forms) 기술을 이용해 시트에 완전 무료/무인증으로 저장하는 함수"""
+# --- 🛠️ [대안] 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 ---
+def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
+    """유저 피드백 발생 시 깃허브 레포지토리의 data.csv 파일을 갱신하는 함수"""
     try:
-        form_url = st.secrets["google_form"]["url"]
+        # 스트림릿 Secrets에서 깃허브 정보 가져오기
+        GITHUB_TOKEN = st.secrets["github"]["token"]
+        REPO_NAME = st.secrets["github"]["repo"] # 예: "내아이디/레포이름"
+        FILE_PATH = "data.csv"
         
-        data = {
-            st.secrets["google_form"]["entry_headline"]: headline,
-            st.secrets["google_form"]["entry_source"]: source,
-            st.secrets["google_form"]["entry_bias"]: str(bias_risk),
-            st.secrets["google_form"]["entry_clickbait"]: str(clickbait_risk),
-            st.secrets["google_form"]["entry_feedback"]: feedback
+        url = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
+        headers = {
+            "Authorization": f"token {GITHUB_TOKEN}",
+            "Accept": "application/vnd.github.v3+json"
         }
-        requests.post(form_url, data=data)
+        
+        # 1. 기존에 저장된 CSV 파일이 있는지 확인 및 가져오기
+        res = requests.get(url, headers=headers)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_row = pd.DataFrame([{
+            "날짜": current_time, "뉴스 제목": headline, "신문사": source, 
+            "시선 왜곡도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback
+        }])
+        
+        if res.status_code == 200:
+            # 기존 파일이 존재하면 내용을 다운로드하여 합치기
+            file_data = res.json()
+            sha = file_data["sha"]
+            from base64 import b64decode, b64encode
+            existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
+            
+            # 기존 데이터 읽기
+            import io
+            old_df = pd.read_csv(io.StringIO(existing_content))
+            updated_df = pd.concat([old_df, new_row], ignore_index=True)
+        else:
+            # 파일이 아예 없으면 새로 만들기
+            sha = None
+            updated_df = new_row
+            
+        # 2. CSV 문자열로 변환 (한글 깨짐 방지 utf-8-sig)
+        csv_buffer = io.StringIO()
+        updated_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
+        content_encoded = b64encode(csv_buffer.getvalue().encode("utf-8-sig")).decode("utf-8")
+        
+        # 3. 깃허브에 푸시(Commit) 보내기
+        put_data = {
+            "message": "🔥 시스템 실시간 뉴스 데이터 누적 피드백 기록",
+            "content": content_encoded
+        }
+        if sha:
+            put_data["sha"] = sha
+            
+        requests.put(url, headers=headers, json=put_data)
         return True
     except Exception as e:
-        print(f"[Save Error] {str(e)}")
+        print(f"[GitHub Sync Error] {str(e)}")
         return False
 
-# --- 1. 미디어 균형 분석 GPT 엔진 (다양성 강화 버전) ---
+# --- 1. 미디어 균형 분석 GPT 엔진 ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
@@ -43,10 +83,6 @@ class AdvancedEthicsAnalyzer:
         
         [뉴스 헤드라인]: "{headline}"
         [언론사/출처]: "{source}"
-        
-        [🚨 중요 - 답변 다양성 확보 가이드]:
-        - 'detailed_reason'와 'one_line_summary'를 작성할 때 절대 뻔하고 정형화된 틀로 시작하지 마세요.
-        - 헤드라인에 쓰인 구체적인 단어나 사회적 맥락을 정확히 짚어내어 매번 '서로 완전히 다른 분석 내용'이 나오도록 개성 있게 작성하세요.
         
         [응답 형식 (JSON)]:
         {{
@@ -125,7 +161,7 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 2층: 데이터 테이블 (width='stretch' 스펙 반영 🛠️)
+    # 2층: 데이터 테이블
     st.subheader("📋 실시간 뉴스 균형 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 확인 대기'))
     st.dataframe(
@@ -139,7 +175,7 @@ if st.session_state.analytics_history:
     # 3층: 통계 그래프 (한글 절대 방어 치트키 적용 구역)
     st.subheader("📊 매체별 시선 편향 및 자극성 성향")
     
-    import os
+    import io, os
     import matplotlib.font_manager as fm
     
     font_path = "./NanumGothic.ttf"
@@ -181,7 +217,7 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 4층: 정밀 보고서 및 구글 전송 트리거
+    # 4층: 정밀 보고서 및 깃허브 실시간 푸시 트리거
     st.subheader("🕵️‍♂️ AI 미디어 가이드의 정밀 진단 소견")
     recent_records = result_df.tail(3).iloc[::-1]
     tabs = st.tabs([f"⏱️ {i+1}번째 전 뉴스" for i in range(len(recent_records))])
@@ -202,14 +238,14 @@ if st.session_state.analytics_history:
                     with col_f1:
                         if st.button("👍 공감해요", key=f"like_{original_idx}"):
                             st.session_state.feedback_dict[headline_key] = "👍 공감함"
-                            with st.spinner("통계 데이터 전송 중..."):
-                                save_data_without_google_cloud(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👍 공감함")
+                            with st.spinner("깃허브 저장소에 데이터 동기화 중..."):
+                                save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👍 공감함")
                             st.rerun()
                     with col_f2:
                         if st.button("👎 글쎄요", key=f"dislike_{original_idx}"):
                             st.session_state.feedback_dict[headline_key] = "👎 동의 안 함"
-                            with st.spinner("통계 데이터 전송 중..."):
-                                save_data_without_google_cloud(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👎 동의 안 함")
+                            with st.spinner("깃허브 저장소에 데이터 동기화 중..."):
+                                save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👎 동의 안 함")
                             st.rerun()
                 else:
                     st.success(f"참여 완료: {current_feedback}")
