@@ -6,9 +6,11 @@ from openai import OpenAI
 import json
 import requests # 🌐 구글 클라우드 대신 인터넷 통신으로 데이터를 보냅니다.
 
-# --- 0. 스타일 및 디자인 세팅 (한글 깨짐 차단) ---
-plt.rcParams['font.family'] = ['NanumBarunGothic', 'NanumGothic', 'AppleGothic', 'Malgun Gothic', 'sans-serif']
-plt.rcParams['axes.unicode_minus'] = False
+# --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단 수정) ---
+import matplotlib as mpl
+# 스트림릿 리눅스 서버 환경에서 DejaVu Sans 폰트 경고가 뜨지 않도록 기본 무폰트 세팅을 강제합니다.
+mpl.rcParams['font.family'] = 'sans-serif'
+mpl.rcParams['axes.unicode_minus'] = False
 sns.set_theme(style="whitegrid")
 
 # --- 🛠️ 구글 클라우드 없이 시트에 데이터 전송하는 함수 ---
@@ -122,8 +124,8 @@ if st.session_state.analytics_history:
     # 1층: 스코어보드
     col_m1, col_m2, col_m3 = st.columns(3)
     with col_m1: st.metric(label="📊 모니터링한 뉴스", value=f"{len(result_df)} 건")
-    with col_m2: st.metric(label=f"👓 평균 시선 왜곡도", value=f"{result_df['시선 왜곡도'].mean():.1f} / 10.0")
-    with col_m3: st.metric(label=f"🎣 평균 제목 자극성", value=f"{result_df['제목 자극성'].mean():.1f} / 10.0")
+    with col_m2: st.metric(label="👓 평균 시선 왜곡도", value=f"{result_df['시선 왜곡도'].mean():.1f} / 10.0")
+    with col_m3: st.metric(label="🎣 평균 제목 자극성", value=f"{result_df['제목 자극성'].mean():.1f} / 10.0")
 
     st.markdown("---")
 
@@ -134,18 +136,20 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 3층: 통계 그래프 (한글 완벽 지원)
+    # 3층: 통계 그래프 (폰트 에러 유발 요소 완전 배제 및 수정)
     st.subheader("📊 매체별 시선 편향 및 자극성 성향")
     fig, axes = plt.subplots(1, 2, figsize=(15, 5)) 
     
     media_bias = result_df.groupby('언론사/출처')['시선 왜곡도'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='시선 왜곡도', data=media_bias, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
-    axes[0].set_title('🔶 신문사별 평균 시선 왜곡도', fontsize=12, fontweight='bold')
+    # 제목에서 이모지(🔶)를 빼고 깨끗한 한글만 지정하여 폰트 에러를 완전히 차단합니다.
+    axes[0].set_title('신문사별 평균 시선 왜곡도 (1-10)', fontsize=12, fontweight='bold')
     axes[0].set_ylim(0, 10)
 
     media_bait = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='제목 자극성', data=media_bait, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
-    axes[1].set_title('🎣 신문사별 평균 제목 자극성', fontsize=12, fontweight='bold')
+    # 제목에서 이모지(🎣)를 빼고 깨끗한 한글만 지정하여 폰트 에러를 완전히 차단합니다.
+    axes[1].set_title('신문사별 평균 제목 자극성 (1-10)', fontsize=12, fontweight='bold')
     axes[1].set_ylim(0, 10)
     
     plt.tight_layout()
