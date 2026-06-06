@@ -72,7 +72,6 @@ class AdvancedEthicsAnalyzer:
         self.client = OpenAI(api_key=api_key)
 
     def analyze_with_gpt(self, headline, source):
-        # 💡 뉴스 헤드라인 오타 자동 정제 지침을 프롬프트에 추가했습니다!
         prompt = f"""
         당신은 사용자가 미디어의 홍수 속에서 '생각의 중심'을 잡도록 돕는 독창적이고 날카로운 미디어 밸런스 가이드이자, 한국어 뉴스 텍스트 정제 전문가입니다.
         
@@ -102,7 +101,7 @@ class AdvancedEthicsAnalyzer:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.3 # 💡 오타 교정의 정확도를 극대화하기 위해 낮은 온도를 유지합니다.
+                temperature=0.3
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -115,7 +114,17 @@ class AdvancedEthicsAnalyzer:
 # --- 2. 웹 화면 구성 및 세션 상태 초기화 ---
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
 st.title("⚖️ 뉴스 편향도 분석기 (News Balance Filter)")
-st.warning("🎯 **이 서비스가 왜 필요할까요?** 뉴스를 읽다 보면 나도 모르게 세상에 대한 '색안경'이 끼워지곤 합니다. 한쪽으로 치우친 뉴스를 자꾸 클릭하면, 포털 알고리즘마저 내 피드를 편향된 정보로만 가득 채우게 됩니다.")
+
+# 📢 첫 화면 안내 및 데이터 전송 경고문 보강 구역 ⭐
+st.warning("""
+🎯 **이 서비스가 왜 필요할까요?** 뉴스를 읽다 보면 나도 모르게 세상에 대한 '색안경'이 끼워지곤 합니다. 한쪽으로 치우친 뉴스를 자꾸 클릭하면, 포털 알고리즘마저 내 피드를 편향된 정보로만 가득 채우게 됩니다.
+
+---
+🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
+1. 본 서비스는 AI를 활용한 뉴스 데이터 편향 연구 및 분석 과제의 일환으로 운영됩니다.
+2. 분석 결과 하단의 **[🕵️‍♂️ AI의 정밀 진단 소견]** 탭에서 **`👍 공감해요`** 또는 **`👎 글쎄요`** 버튼을 반드시 눌러주세요. 
+3. **버튼을 누르시는 순간, 입력하신 [뉴스 제목, 신문사, AI 분석 결과, 피드백 종류] 데이터가 개발자의 데이터베이스(GitHub 저장소)로 안전하게 실시간 전송 및 적재됩니다.** 4. 수집된 데이터는 통계 분석 목적 이외에는 절대 사용되지 않으며, 개인정보는 수집하지 않습니다. 신중하고 성실한 피드백 참여를 부탁드립니다!
+""")
 st.markdown("---")
 
 try:
@@ -149,13 +158,12 @@ with st.sidebar:
 
 if submit_button:
     if not input_headline or not input_source:
-        st.sidebar.warning("뉴스 제목과 신문사를 모두 입력해 주세요!")
+        st.sidebar.warning("뉴스 제목 and 신문사를 모두 입력해 주세요!")
     else:
         analyzer = AdvancedEthicsAnalyzer(api_key=api_key)
         with st.spinner("⚖️ AI가 뉴스를 진단 중입니다..."):
             gpt_res = analyzer.analyze_with_gpt(input_headline, input_source)
             
-            # GPT가 완벽하게 정제해 준 신문사 이름과 뉴스 제목을 가져옵니다 ⭐
             ai_cleaned_source = gpt_res.get('cleaned_source', input_source)
             ai_cleaned_headline = gpt_res.get('cleaned_headline', input_headline)
             
@@ -192,7 +200,7 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
 
-    # 3층: 통계 그래프 (한글 절대 방어 치트키 적용 구역)
+    # 3층: 통계 그래프
     st.subheader("📊 매체별 시선 편향 및 자극성 성향")
     
     import os
