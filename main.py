@@ -253,7 +253,7 @@ if st.session_state.analytics_history:
                     st.success(f"참여 완료: {current_feedback}")
             with col_b2:
                 st.markdown(f"📝 **뉴스 제목:** \"{row['뉴스 헤드라인']}\"")
-                st.info(row['AI의 분석 소견'])
+                st.info(row['AI 미디어 가이드의 분석 소견'])
                 st.warning(f"🎯 {row['추천 피드 오염 위험 요약']}")
 else:
     st.info("👋 뉴스 제목을 왼쪽 사이드바에 입력하여 뉴스 편향도 분석기를 작동시켜 보세요!")
