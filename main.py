@@ -69,10 +69,10 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         print(f"[2단계: 서버 응답 메시지] {put_res.text}")
         
         if put_res.status_code in [200, 201]:
-            st.toast("🎉 깃허브에 데이터가 성공적으로 적재되었습니다!")
+            st.toast("🎉 피드백 감사합니다!")
             return True
         else:
-            st.error(f"❌ 깃허브 전송 실패! 에러코드: {put_res.status_code}")
+            st.error(f"❌ 데이터 전송 실패! 에러코드: {put_res.status_code}")
             return False
             
     except Exception as e:
@@ -118,7 +118,7 @@ class AdvancedEthicsAnalyzer:
 
 # --- 2. 웹 화면 구성 및 세션 상태 초기화 ---
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
-st.title("⚖️ 뉴스 생각-중심 필터 (News Balance Filter)")
+st.title("⚖️ 뉴스 헤드라인 편향도 분석기 (News Balance Filter)")
 st.warning("🎯 **이 서비스가 왜 필요할까요?** 뉴스를 읽다 보면 나도 모르게 세상에 대한 '색안경'이 끼워지곤 합니다. 한쪽으로 치우친 뉴스를 자꾸 클릭하면, 포털 알고리즘마저 내 피드를 편향된 정보로만 가득 채우게 됩니다.")
 st.markdown("---")
 
@@ -145,13 +145,13 @@ if submit_button:
         st.sidebar.warning("뉴스 제목과 신문사를 모두 입력해 주세요!")
     else:
         analyzer = AdvancedEthicsAnalyzer(api_key=api_key)
-        with st.spinner("⚖️ AI가 뉴스를 다각도로 진단 중입니다..."):
+        with st.spinner("⚖️ AI가 뉴스를 열심히 진단 중입니다..."):
             gpt_res = analyzer.analyze_with_gpt(input_headline, input_source)
             
             new_record = {
                 '뉴스 헤드라인': input_headline, '언론사/출처': input_source,
                 '감성 점수': gpt_res['sentiment_score'], '시선 왜곡도': gpt_res['bias_risk'], 
-                '제목 자극성': gpt_res['clickbait_risk'], 'AI 미디어 가이드의 분석 소견': gpt_res['detailed_reason'],
+                '제목 자극성': gpt_res['clickbait_risk'], 'AI 가이드의 분석 소견': gpt_res['detailed_reason'],
                 '추천 피드 오염 위험 요약': gpt_res['one_line_summary'],
                 '감성 판정': '🟢 긍정적' if gpt_res['sentiment_score'] > 0.1 else ('🔴 부정/갈등' if gpt_res['sentiment_score'] < -0.1 else '🟡 단순 사실')
             }
@@ -164,14 +164,14 @@ if st.session_state.analytics_history:
 
     # 1층: 스코어보드
     col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1: st.metric(label="📊 모니터링한 뉴스", value=f"{len(result_df)} 건")
+    with col_m1: st.metric(label="📊 분석한 뉴스", value=f"{len(result_df)} 건")
     with col_m2: st.metric(label="👓 평균 시선 왜곡도", value=f"{result_df['시선 왜곡도'].mean():.1f} / 10.0")
     with col_m3: st.metric(label="🎣 평균 제목 자극성", value=f"{result_df['제목 자극성'].mean():.1f} / 10.0")
 
     st.markdown("---")
 
     # 2층: 데이터 테이블
-    st.subheader("📋 실시간 뉴스 균형 진단 기록")
+    st.subheader("📋 분석 기록표")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 확인 대기'))
     st.dataframe(
         result_df[['언론사/출처', '뉴스 헤드라인', '시선 왜곡도', '제목 자극성', '감성 판정', '유저 피드백']], 
@@ -227,7 +227,7 @@ if st.session_state.analytics_history:
     st.markdown("---")
 
     # 4층: 정밀 보고서 및 깃허브 실시간 푸시 트리거
-    st.subheader("🕵️‍♂️ AI 미디어 가이드의 정밀 진단 소견")
+    st.subheader("🕵️‍♂️ AI 가이드의 정밀 진단 소견")
     recent_records = result_df.tail(3).iloc[::-1]
     tabs = st.tabs([f"⏱️ {i+1}번째 전 뉴스" for i in range(len(recent_records))])
     
@@ -257,7 +257,7 @@ if st.session_state.analytics_history:
                     with col_f2:
                         if st.button("👎 글쎄요", key=f"dislike_{original_idx}"):
                             st.session_state.feedback_dict[headline_key] = "👎 동의 안 함"
-                            with st.spinner("깃허브 저장소에 데이터 동기화 중..."):
+                            with st.spinner("데이터 동기화 중..."):
                                 success = save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 왜곡도'], row['제목 자극성'], "👎 동의 안 함")
                                 if success:
                                     st.success("✅ 저장 완료!")
@@ -268,7 +268,7 @@ if st.session_state.analytics_history:
                     st.success(f"참여 완료: {current_feedback}")
             with col_b2:
                 st.markdown(f"📝 **뉴스 제목:** \"{row['뉴스 헤드라인']}\"")
-                st.info(row['AI 미디어 가이드의 분석 소견'])
+                st.info(row['AI 가이드의 분석 소견'])
                 st.warning(f"🎯 {row['추천 피드 오염 위험 요약']}")
 else:
     st.info("👋 뉴스 제목을 왼쪽 사이드바에 입력하여 생각의 중심을 지키는 필터를 작동시켜 보세요!")
