@@ -10,7 +10,7 @@ import io
 import random
 import os  
 import matplotlib.font_manager as fm
-from bs4 import BeautifulSoup  # 👈 실시간 뉴스 크롤링을 위한 패키지 추가!
+from bs4 import BeautifulSoup  
 
 # --- 0. 스타일 및 디자인 세팅 (한글 폰트 무결성 확보) ---
 font_path = "./NanumGothic.ttf"
@@ -22,7 +22,6 @@ if not os.path.exists(font_path):
     except Exception as e:
         print(f"[Font Download Error] {e}")
 
-# Matplotlib 시스템 엔진에 폰트를 등록하여 깨짐 현상 사전 차단
 if os.path.exists(font_path):
     fm.fontManager.addfont(font_path)
     prop = fm.FontProperties(fname=font_path)
@@ -103,9 +102,9 @@ class AdvancedEthicsAnalyzer:
         except Exception as e:
             return {"cleaned_source": source, "cleaned_headline": headline, "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, "detailed_reason": f"에러: {e}", "one_line_summary": "⚠️ 분석 실패"}
 
-# --- 2. 📡 실시간 구글 뉴스(대한민국 트렌드) 크롤링 함수 ---
-@st.cache_data(ttl=600)  # ⏰ 10분 동안 데이터를 기억하여 불필요한 요청 방지 및 속도 최적화
-def get_realtime_hot_issues():
+# --- 2. 📡 실시간 구글 뉴스 대량 크롤링 엔진 (수정 포인트 🌟) ---
+@st.cache_data(ttl=600)  
+def get_realtime_large_news_pool():
     try:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
         response = requests.get(url, timeout=5)
@@ -114,7 +113,8 @@ def get_realtime_hot_issues():
             items = soup.find_all("item")
             
             realtime_issues = []
-            for item in items[:6]:  # 최신 실시간 뉴스 상위 6개 파싱
+            # 랜덤 샘플링 폭을 넓히기 위해 상위 35개의 실시간 뉴스를 넉넉하게 긁어옵니다!
+            for item in items[:35]:  
                 title_raw = item.title.text
                 if " - " in title_raw:
                     title, source = title_raw.rsplit(" - ", 1)
@@ -124,15 +124,14 @@ def get_realtime_hot_issues():
             return realtime_issues
     except Exception as e:
         print(f"[뉴스 크롤링 실패] {e}")
-    # 크롤링 실패 시 서비스가 멈추지 않도록 제공하는 백업 풀
-    return [
-        {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
-        {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
-        {"title": "금리 동결 결정에 영끌족 한숨, 부동산 시장 어디로?", "source": "조선 일보"}
-    ]
+    
+    # 크롤링 실패 시 백업 풀
+    return [{"title": f"백업 실시간 이슈 뉴스 {i}", "source": "종합뉴스"} for i in range(1, 10)]
 
-# 실시간 뉴스 풀 가동!
-HOT_ISSUES = get_realtime_hot_issues()
+# 전체 35개짜리 대형 뉴스 풀 확보!
+TOTAL_NEWS_POOL = get_realtime_large_news_pool()
+# 대시보드 리스트용으로는 기존처럼 최상위 6개만 슬라이싱해서 지정!
+HOT_ISSUES = TOTAL_NEWS_POOL[:6]
 
 # --- 3. 페이지 설정 및 데이터 초기화 ---
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
@@ -154,26 +153,24 @@ st.warning("""
 4. 수집된 정보는 통계 분석 목적으로만 활용되며, 개인 식별 정보는 일절 수집되지 않습니다. 신중하고 성실한 피드백 참여에 감사드립니다!
 """)
 
-# --- 🚀 사이드바 레이아웃 (검색창 최상단화 및 실시간 동적 버튼 연동) ---
+# --- 🚀 사이드바 레이아웃 (진짜 실시간 무작위 추천 적용) ---
 with st.sidebar:
     st.header("🔍 균형 잡힌 뉴스 읽기")
     
-    # 1. 메인 검색 폼 입력 구역
     with st.form(key='news_input_form', clear_on_submit=False):
         input_h = st.text_input("📝 뉴스 제목 입력", value=st.session_state.input_headline)
         input_s = st.text_input("🏢 신문사 / 출처", value=st.session_state.input_source)
         submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
 
     st.markdown("---")
-    
-    # 2. 귀찮음 해소용 빠른 추천 구역 (실시간 데이터 연동)
     st.subheader("💡 입력하기 귀찮으신가요?")
     
+    # 🌟 [로직 변경 완료] 아래 리스트에 없는 35개의 넓은 풀에서 '진짜 실시간 랜덤' 추출!
     if st.button("🎲 실시간 랜덤 뉴스 추천"):
-        picked = random.choice(HOT_ISSUES)
+        picked = random.choice(TOTAL_NEWS_POOL)
         st.session_state.input_headline = picked['title']
         st.session_state.input_source = picked['source']
-        st.toast("실시간 랜덤 뉴스가 입력창에 채워졌습니다!")
+        st.toast("실시간 대형 뉴스 풀에서 무작위 1건을 추첨했습니다!")
         st.rerun()
 
     st.markdown("👇 **아래 실시간 트렌드를 클릭하면 자동 입력됩니다.**")
@@ -237,21 +234,18 @@ if st.session_state.analytics_history:
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     k_font = fm.FontProperties(fname=font_path) if os.path.exists(font_path) else None
     
-    # 챠트 1: 편향도 통계
     bias_data = result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='시선 편향도', data=bias_data, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
     axes[0].set_title('신문사별 평균 시선 편향도', fontproperties=k_font, fontsize=12)
     axes[0].set_xlabel('언론사/출처', fontproperties=k_font)
     axes[0].set_ylabel('시선 편향도', fontproperties=k_font)
     
-    # 챠트 2: 자극성 통계
     bait_data = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='제목 자극성', data=bait_data, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
     axes[1].set_title('신문사별 평균 제목 자극성', fontproperties=k_font, fontsize=12)
     axes[1].set_xlabel('언론사/출처', fontproperties=k_font)
     axes[1].set_ylabel('제목 자극성', fontproperties=k_font)
     
-    # 축 눈금 인코딩 강제 매핑으로 한글 깨짐 방어 완료
     for ax in axes:
         if k_font:
             for t in ax.get_xticklabels(): t.set_fontproperties(k_font)
@@ -261,12 +255,10 @@ if st.session_state.analytics_history:
 
     st.markdown("---")
     
-    # 📡 [집단지성 피드백 연동 레이어]
     st.subheader("🕵️‍♂️ AI의 정밀 진단 소견 및 집단지성 피드백")
     recent = result_df.tail(3).iloc[::-1]
     tabs = st.tabs([f"⏱️ {i+1}번째 분석 뉴스" for i in range(len(recent))])
     
-    # 원격 저장소의 data.csv를 실시간 파싱하여 다른 참여자 응답 추출
     try:
         token = st.secrets["github"]["token"]
         repo = st.secrets["github"]["repo"]
@@ -285,7 +277,6 @@ if st.session_state.analytics_history:
                 st.write(f"편향도: `{row['시선 편향도']}` | 자극성: `{row['제목 자극성']}`")
                 st.markdown("---")
                 
-                # 타 유저 피드백 집계 출력
                 st.markdown("👥 **다른 사람들의 피드백 통계**")
                 if not global_df.empty and '뉴스 제목' in global_df.columns:
                     same_news = global_df[global_df['뉴스 제목'] == key]
