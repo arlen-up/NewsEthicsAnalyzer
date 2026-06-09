@@ -65,30 +65,37 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         return True
     except: return False
 
-# --- 1. GPT 분석 엔진 ---
+# --- 1. GPT 분석 엔진 (프롬프트 및 분석 깊이 대폭 고도화 🌟) ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
 
     def analyze_with_gpt(self, headline, source):
         prompt = f"""
-        당신은 뉴스 텍스트 정제 전문가이자 미디어 밸런스 가이드입니다.
-        [임무] 
-        1. 신문사명(cleaned_source)과 뉴스 제목(cleaned_headline)의 오타/탈자를 표준 명칭으로 교정하세요.
-        2. 뉴스 제목의 시선 편향도(bias_risk, 1-10)와 제목 자극성(clickbait_risk, 1-10)을 분석하세요.
+        당신은 미디어 리터러시 진단 기관의 수석 연구원이자 텍스트 정제 전문가입니다.
+        제공된 뉴스 제목과 언론사를 바탕으로, 단순 표면 분석을 넘어 숨겨진 저의와 프레임워크를 정밀 해부하세요.
         
         [뉴스 제목]: "{headline}"
         [신문사]: "{source}"
         
-        응답은 반드시 아래 JSON 형식을 지키세요:
+        [진단 임무 및 기준]
+        1. 텍스트 정제: 신문사명(cleaned_source)과 뉴스 제목(cleaned_headline)의 오타나 불필요한 특수문자를 정제하고 표준 명칭으로 교정하세요.
+        2. 시선 편향도(bias_risk, 1-10): 특정 이념, 집단, 진영의 이해관계를 대변하거나 갈등을 부추기는 감정적 어휘가 투영되었는지 평가하세요.
+        3. 제목 자극성(clickbait_risk, 1-10): 인과관계 생략, 과장된 형용사 사용, 자극적 단어 배치로 독자의 낚시성 클릭을 유도하는지 평가하세요.
+        4. 정밀 심층 소견(detailed_reason): 반드시 아래의 3가지 핵심 하위 관점을 포함하여 구체적이고 깊이 있게 기술하세요.
+           - [프레이밍 전략]: 언론사가 이 제목을 통해 대중에게 주입하고자 하는 특정 관점이나 프레임 분석
+           - [논리적 공백]: 독자의 판단을 흐리게 만들기 위해 의도적으로 생략하거나 단순화한 핵심 사실 관계 추론
+           - [수용자 가이드]: 이 뉴스를 소비할 때 확증 편향에 빠지지 않기 위해 독자가 견지해야 할 비판적 시선 제시
+        
+        응답은 반드시 철저하게 아래 JSON 형식을 준수해야 합니다:
         {{
             "cleaned_source": "정제된 신문사명",
             "cleaned_headline": "정제된 뉴스 제목",
             "sentiment_score": -1.0~1.0 사이 실수,
             "bias_risk": 1~10 정수,
             "clickbait_risk": 1~10 정수,
-            "detailed_reason": "분석 소견(3~4문장)",
-            "one_line_summary": "날카로운 한 줄 요약"
+            "detailed_reason": "[프레이밍 전략]\\n(분석 내용)\\n\\n[논리적 공백]\\n(분석 내용)\\n\\n[수용자 가이드]\\n(분석 내용)",
+            "one_line_summary": "독자의 확증 편향을 깨부수는 날카로운 한 줄 경고 요약"
         }}
         """
         try:
@@ -100,40 +107,58 @@ class AdvancedEthicsAnalyzer:
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            return {"cleaned_source": source, "cleaned_headline": headline, "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, "detailed_reason": f"에러: {e}", "one_line_summary": "⚠️ 분석 실패"}
+            return {
+                "cleaned_source": source, 
+                "cleaned_headline": headline, 
+                "sentiment_score": 0.0, 
+                "bias_risk": 1, 
+                "clickbait_risk": 1, 
+                "detailed_reason": f"[에러 발생] 분석에 실패했습니다.\n\n원인: {e}", 
+                "one_line_summary": "⚠️ 분석 실패"
+            }
 
-# --- 2. 📡 실시간 구글 뉴스 대량 크롤링 엔진 (우회 헤더 추가 버전 🌟) ---
+# --- 2. 📡 실시간 구글 뉴스 대량 크롤링 엔진 ---
 @st.cache_data(ttl=600)  
 def get_realtime_large_news_pool():
     try:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
-        # 봇 차단을 해제하기 위해 브라우저인 척 속이는 User-Agent 헤더 강제 주입 ⭐
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "max-age=0"
         }
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            soup = BeautifulSoup(response.page_content, features="xml")
+            soup = BeautifulSoup(response.content, "xml")
             items = soup.find_all("item")
             
             realtime_issues = []
-            for item in items[:35]:  
-                if item.title and item.title.text:
-                    title_raw = item.title.text
+            for item in items:
+                if len(realtime_issues) >= 35:
+                    break
+                    
+                if item and item.title and item.title.text:
+                    title_raw = item.title.text.strip()
+                    
                     if " - " in title_raw:
-                        title, source = title_raw.rsplit(" - ", 1)
+                        parts = title_raw.rsplit(" - ", 1)
+                        title = parts[0].strip()
+                        source = parts[1].strip()
                     else:
-                        title, source = title_raw, "실시간 뉴스"
-                    realtime_issues.append({"title": title.strip(), "source": source.strip()})
+                        title = title_raw
+                        source = "실시간 뉴스"
+                        
+                    if title and len(title) > 5:
+                        realtime_issues.append({"title": title, "source": source})
             
-            # 정상적으로 데이터를 파싱해왔다면 리스트 반환
-            if realtime_issues:
+            if len(realtime_issues) >= 10:
                 return realtime_issues
+                
     except Exception as e:
         print(f"[뉴스 크롤링 실패] {e}")
     
-    # 🌟 차단되거나 오류 발생 시 완전히 고정된 가짜 텍스트 대신, 트렌디한 예시 문장으로 세련되게 백업 설정
     return [
         {"title": "정부, 실시간 민생 안정 대책 및 경제 활성화 방안 발표", "source": "종합뉴스"},
         {"title": "글로벌 기술 박람회 개막, 차세대 AI 혁신 기술 대거 공개", "source": "IT한국"},
@@ -325,7 +350,10 @@ if st.session_state.analytics_history:
                             st.rerun()
                 else: st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
             with c2:
-                st.info(row['AI의 미디어 가이드 분석 소견'])
+                # 🌟 우측 진단 소견 칸에 마크다운 형식을 그대로 살려 시각적 가독성 제공
+                st.markdown("### 🔍 AI 심층 진단 리포트")
+                st.markdown(row['AI의 미디어 가이드 분석 소견'])
+                st.markdown("---")
                 st.warning(row['추천 피드 오염 위험 요약'])
 else:
     st.info("👋 왼쪽 사이드바에서 뉴스를 직접 입력하거나 아래의 '실시간 트렌드 메뉴'를 클릭해 분석을 시작해보세요!")
