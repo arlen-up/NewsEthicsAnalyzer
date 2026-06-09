@@ -31,7 +31,7 @@ if os.path.exists(font_path):
 
 sns.set_theme(style="whitegrid")
 
-# --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 (서술 피드백 확장 🌟) ---
+# --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 ---
 def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, user_comment=""):
     try:
         GITHUB_TOKEN = st.secrets["github"]["token"]
@@ -43,7 +43,7 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, u
         res = requests.get(url, headers=headers)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 🌟 새 데이터 적재 행에 '유저 상세 의견' 항목을 추가했습니다.
+        # 새 데이터 적재 행에 '유저 상세 의견' 항목 컬럼 추가
         new_row = pd.DataFrame([{
             "날짜": current_time, 
             "뉴스 제목": headline, 
@@ -61,7 +61,7 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, u
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
             old_df = pd.read_csv(io.StringIO(existing_content))
             
-            # 기존 구버전 CSV 파일에 해당 컬럼이 없을 경우를 대비한 자동 예외 보정
+            # 구버전 CSV 파일 호환성을 위한 컬럼 자동 보정
             if "유저 상세 의견" not in old_df.columns:
                 old_df["유저 상세 의견"] = "작성 안 함"
                 
@@ -80,7 +80,7 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, u
         return True
     except: return False
 
-# --- 1. GPT 분석 엔진 (유저의 상세 코멘트 오답노트 학습 적용 🌟) ---
+# --- 1. GPT 분석 엔진 (유저 상세 피드백 오답노트 학습 루프 반영) ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
@@ -109,7 +109,7 @@ class AdvancedEthicsAnalyzer:
         {feedback_learning_prompt}
         
         [진단 임무 및 기준]
-        1. 텍스트 정제: 신문사명(cleaned_source)과 뉴스 제목(cleaned_headline)의 오타나 불필요한 특수문자를 정제하고 표준 명칭으로 교정하세요.
+        1. 텍스트 정제: 신문사명(cleaned_source)과 뉴스 뉴스 제목(cleaned_headline)의 오타나 불필요한 특수문자를 정제하고 표준 명칭으로 교정하세요.
         2. 시선 편향도(bias_risk, 1-10): 특정 이념, 집단, 진영의 이해관계를 대변하거나 갈등을 부추기는 감정적 어휘가 투영되었는지 평가하세요.
         3. 제목 자극성(clickbait_risk, 1-10): 인과관계 생략, 과장된 형용사 사용, 자극적 단어 배치로 독자의 낚시성 클릭을 유도하는지 평가하세요.
         4. 정밀 심층 소견(detailed_reason): 반드시 일반 대중도 직관적으로 이해할 수 있는 비유와 친근한 대화체 문장으로 아래 3가지 테마를 명확히 구분하여 작성하세요.
@@ -147,16 +147,13 @@ class AdvancedEthicsAnalyzer:
                 "one_line_summary": "⚠️ 분석 실패"
             }
 
-# --- 2. 📡 실시간 구글 뉴스 대량 크롤링 엔진 ---
+# --- 2. 📡 실시간 구글 뉴스 대량 크롤링 엔진 (10분 캐싱 고정) ---
 @st.cache_data(ttl=600)  
 def get_realtime_large_news_pool():
     try:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cache-Control": "max-age=0"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
         response = requests.get(url, headers=headers, timeout=10)
         
@@ -168,10 +165,8 @@ def get_realtime_large_news_pool():
             for item in items:
                 if len(realtime_issues) >= 35:
                     break
-                    
                 if item and item.title and item.title.text:
                     title_raw = item.title.text.strip()
-                    
                     if " - " in title_raw:
                         parts = title_raw.rsplit(" - ", 1)
                         title = parts[0].strip()
@@ -185,7 +180,6 @@ def get_realtime_large_news_pool():
             
             if len(realtime_issues) >= 10:
                 return realtime_issues
-                
     except Exception as e:
         print(f"[뉴스 크롤링 실패] {e}")
     
@@ -193,10 +187,7 @@ def get_realtime_large_news_pool():
         {"title": "정부, 실시간 민생 안정 대책 및 경제 활성화 방안 발표", "source": "종합뉴스"},
         {"title": "글로벌 기술 박람회 개막, 차세대 AI 혁신 기술 대거 공개", "source": "IT한국"},
         {"title": "올해 여름 역대급 폭염 우려, 기후 위기 대응책 긴급 점검", "source": "환경일보"},
-        {"title": "한국 중앙은행, 기준 금리 동결 결정... 시장 전망은?", "source": "경제신문"},
-        {"title": "프로스포츠 올스타전 성황리 개최... 팬들 열기 가득", "source": "스포츠중앙"},
-        {"title": "알고리즘 추천 시스템의 명과 암, 현대 미디어 프레임 진단", "source": "리터러시 저널"},
-        {"title": "신작 SF 블록버스터 영화 개봉 첫 주 극장가 압도적 1위", "source": "문화리뷰"}
+        {"title": "한국 중앙은행, 기준 금리 동결 결정... 시장 전망은?", "source": "경제신문"}
     ]
 
 TOTAL_NEWS_POOL = get_realtime_large_news_pool()
@@ -211,8 +202,27 @@ if 'input_source' not in st.session_state: st.session_state.input_source = ""
 if 'analytics_history' not in st.session_state: st.session_state.analytics_history = []
 if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
+# 🌟 메인 화면 안내 구역: 기획 의도 및 서술형 피드백 AI 학습 연동 안내 추가
 st.warning("""
 🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 프로젝트는 뉴스의 시선 편향도를 분석하여 당신의 이해를 돕습니다.
+
+---
+
+### 🔍 왜 이 프로젝트는 '본문'이 아닌 '헤드라인'만 분석할까요?
+
+현대인들이 뉴스 한 편을 끝까지 읽는 비율은 갈수록 줄어들고 있으며, 대다수는 SNS나 포털 화면에서 **오직 '헤드라인'만 훑어보고 세상사를 판단**합니다. 바쁜 뇌가 에너지를 아끼려는 본능(인지적 구두쇠) 때문이죠.
+
+문제는 언론사와 알고리즘이 바로 이 점을 파고든다는 것입니다. 본문에는 평범한 내용을 적어두고도, **제목에는 자극적인 어휘, 인과관계 생략, 은근한 진영 프레임**을 심어 독자의 생각과 클릭을 교묘하게 유도합니다. 제목을 보는 그 짧은 3초 동안 우리의 무의식은 이미 오염되는 셈입니다.
+
+따라서 본 프로젝트는 **미디어 편향성과 선동이 일어나는 '최전선'이 바로 헤드라인**이라는 점에 주목했습니다. 본문 뒤에 숨어 제목으로 장난치는 프레임을 날카롭게 해부하여, 여러분이 단 3초짜리 헤드라인만 보고도 낚이지 않는 **'단단한 방패'**를 채워드리는 것이 이 프로젝트의 존재 이유입니다! 😎
+
+---
+
+### 🧠 여러분의 '한 줄 평'이 AI 탐정을 성장시킵니다!
+
+분석 결과 아래에 있는 피드백 공간에 **여러분의 날카로운 생각이나 판단 이유(한 줄 평)**를 남겨주세요! 
+
+여러분이 남겨주신 생생한 피드백은 데이터베이스에 안전하게 저장된 후, **GPT 분석 엔진의 '오답노트'이자 학습 데이터로 실시간 반영**됩니다. AI가 미처 보지 못한 인간의 정교한 맥락과 피드백을 직접 읽고 스스로의 편향성을 교정하며 진화하는 **'집단지성형 자가 학습 루프'**에 동참해 주세요! 🚀
 
 ---
 🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
@@ -275,7 +285,7 @@ if submit_button:
     if not input_h or not input_s:
         st.sidebar.warning("입력창을 채워주세요!")
     else:
-        # 🎯 '비공감' 피드백뿐만 아니라 유저가 정성스레 남긴 '유저 상세 의견'이 있다면 함께 오답노트에 주입하여 GPT를 고도화 학습시킵니다.
+        # 비공감 피드백과 함께 유저가 남긴 정성 코멘트 데이터를 추출하여 GPT 오답노트 컨텍스트 구성
         learning_context = ""
         if not global_df.empty and '유저 피드백' in global_df.columns:
             disliked_samples = global_df[global_df['유저 피드백'] == '비공감'].tail(5)
@@ -376,8 +386,8 @@ if st.session_state.analytics_history:
                 st.write("**🤖 당신의 분석 의견은 어떤가요?**")
                 
                 if st.session_state.feedback_dict.get(key) is None:
-                    # 🌟 [선택 사항] 유저가 생각이나 판단 이유를 자유롭게 적을 수 있는 입력창 공간 컴포넌트 추가
-                    user_note = st.text_input("💬 판단하신 이유나 한 줄 평을 남겨주세요 (선택)", key=f"note_{o_idx}", placeholder="예: 분석이 너무 정확해요! / 이 뉴스는 선동에 가까워요.")
+                    # 💬 유저 상세 한 줄 평 입력 패널
+                    user_note = st.text_input("💬 판단하신 이유나 한 줄 평을 남겨주세요 (선택)", key=f"note_{o_idx}", placeholder="예: 분석이 정확해요 / 프레임 왜곡이 심하네요.")
                     
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
