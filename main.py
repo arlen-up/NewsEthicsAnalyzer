@@ -261,12 +261,15 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
-    metrics_data = {
-        "점수 범위": ["1~3점", "4~7점", "8~10점"], 
-        "시선 편향도": ["🟢 객관적/중립적", "🟡 은근한 시선 유도", "🔴 특정 진영 편중"], 
-        "제목 자극성": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성/선동"]
-    }
-    st.table(pd.DataFrame(metrics_data))
+    
+    # 🛠️ [사이드바 마크다운 수정] 깨지던 st.table을 지우고 100% 인식되는 순수 마크다운 표로 교체했습니다.
+    st.markdown("""
+| 점수 범위 | 시선 편향도 | 제목 자극성 |
+| :--- | :--- | :--- |
+| **1~3점** | 🟢 **객관적 / 중립적** | 🟢 **담백한 사실 전달** |
+| **4~7점** | 🟡 **은근한 시선 유도** | 🟡 **호기심 유발 유도** |
+| **8~10점** | 🔴 **특정 진영 편중** | 🔴 **낚시성 / 선동** |
+""")
 
 # --- 4. 분석 실행 가동 제어 ---
 try: api_key = st.secrets["OPENAI_API_KEY"]
@@ -325,7 +328,21 @@ if st.session_state.analytics_history:
     st.markdown("---")
     st.subheader("📋 뉴스 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 대기'))
-    st.dataframe(result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '유저 피드백']], width=1200, hide_index=True)
+    
+    # 🛠️ [모바일 가독성 업그레이드] 
+    # TextColumn 형식을 명시적으로 선언하여, 화면이 좁은 모바일에서도 이모지나 글씨 깨짐 없이 자동 래핑 및 가독성을 확보합니다.
+    st.dataframe(
+        result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '유저 피드백']], 
+        width=1200, 
+        hide_index=True,
+        column_config={
+            "언론사/출처": st.column_config.TextColumn("🏢 언론사/출처"),
+            "뉴스 헤드라인": st.column_config.TextColumn("📰 뉴스 헤드라인"),
+            "시선 편향도": st.column_config.TextColumn("👓 시선 편향도"),
+            "제목 자극성": st.column_config.TextColumn("🎣 제목 자극성"),
+            "유저 피드백": st.column_config.TextColumn("👥 유저 피드백")
+        }
+    )
     
     st.markdown("---")
     st.subheader("📊 매체별 편향성 통계")
