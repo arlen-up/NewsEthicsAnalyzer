@@ -8,10 +8,11 @@ import requests
 from datetime import datetime
 import io
 import random
-import os
+import os  
 import matplotlib.font_manager as fm
+from bs4 import BeautifulSoup  # 👈 실시간 뉴스 크롤링을 위한 패키지 추가!
 
-# --- 0. 스타일 및 디자인 세팅 (한글 폰트 강제 로드 유틸리티) ---
+# --- 0. 스타일 및 디자인 세팅 (한글 폰트 무결성 확보) ---
 font_path = "./NanumGothic.ttf"
 if not os.path.exists(font_path):
     try:
@@ -21,7 +22,7 @@ if not os.path.exists(font_path):
     except Exception as e:
         print(f"[Font Download Error] {e}")
 
-# Matplotlib에 폰트 등록 및 시스템 기본 폰트로 강제 설정하여 경고 원천 차단 ⭐
+# Matplotlib 시스템 엔진에 폰트를 등록하여 깨짐 현상 사전 차단
 if os.path.exists(font_path):
     fm.fontManager.addfont(font_path)
     prop = fm.FontProperties(fname=font_path)
@@ -102,7 +103,38 @@ class AdvancedEthicsAnalyzer:
         except Exception as e:
             return {"cleaned_source": source, "cleaned_headline": headline, "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, "detailed_reason": f"에러: {e}", "one_line_summary": "⚠️ 분석 실패"}
 
-# --- 2. 페이지 설정 및 데이터 초기화 ---
+# --- 2. 📡 실시간 구글 뉴스(대한민국 트렌드) 크롤링 함수 ---
+@st.cache_data(ttl=600)  # ⏰ 10분 동안 데이터를 기억하여 불필요한 요청 방지 및 속도 최적화
+def get_realtime_hot_issues():
+    try:
+        url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.page_content, features="xml")
+            items = soup.find_all("item")
+            
+            realtime_issues = []
+            for item in items[:6]:  # 최신 실시간 뉴스 상위 6개 파싱
+                title_raw = item.title.text
+                if " - " in title_raw:
+                    title, source = title_raw.rsplit(" - ", 1)
+                else:
+                    title, source = title_raw, "실시간 뉴스"
+                realtime_issues.append({"title": title.strip(), "source": source.strip()})
+            return realtime_issues
+    except Exception as e:
+        print(f"[뉴스 크롤링 실패] {e}")
+    # 크롤링 실패 시 서비스가 멈추지 않도록 제공하는 백업 풀
+    return [
+        {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
+        {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
+        {"title": "금리 동결 결정에 영끌족 한숨, 부동산 시장 어디로?", "source": "조선 일보"}
+    ]
+
+# 실시간 뉴스 풀 가동!
+HOT_ISSUES = get_realtime_hot_issues()
+
+# --- 3. 페이지 설정 및 데이터 초기화 ---
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
 st.title("⚖️ 뉴스 편향도 분석기 (News Balance Filter)")
 
@@ -113,39 +145,39 @@ if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
 st.warning("""
 🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 서비스는 뉴스의 시선 편향도를 분석하여 당신의 미디어 리터러시를 돕습니다.
-🚨 **[데이터 수집 안내]** 분석 결과 하단에서 **공감/글쎄요** 버튼을 누르시면 해당 데이터가 연구용 DB(GitHub)로 실시간 전송됩니다. 성실한 참여 부탁드립니다!
+
+---
+🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
+1. 본 서비스는 AI를 활용한 뉴스 데이터 편향 연구 및 분석 과제의 일환으로 운영됩니다.
+2. 분석 결과 하단의 **[🕵️‍♂️ AI의 정밀 진단 소견 및 집단지성 피드백]** 구역에서 **`👍 공감해요`** 또는 **`👎 글쎄요`** 버튼을 꼭 눌러주세요.
+3. **버튼을 누르시는 순간, 입력하신 [뉴스 제목, 신문사, AI 분석 지표, 선택한 피드백] 데이터가 개발자의 데이터베이스(GitHub 저장소)로 안전하게 실시간 전송 및 적재됩니다.**
+4. 수집된 정보는 통계 분석 목적으로만 활용되며, 개인 식별 정보는 일절 수집되지 않습니다. 신중하고 성실한 피드백 참여에 감사드립니다!
 """)
 
-HOT_ISSUES = [
-    {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
-    {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
-    {"title": "금리 동결 결정에 영끌족 한숨, 부동산 시장 어디로?", "source": "조선 일보"},
-    {"title": "AI 반도체 전쟁, 한국 기업들의 생존 전략은?", "source": "매일 경제"},
-    {"title": "기후 위기 현실화, 올여름 역대급 폭염 예고", "source": "SBS 뉴스"},
-    {"title": "포털 알고리즘이 우리 사회를 분열시키는 방법", "source": "네이바 뉴스"}
-]
-
+# --- 🚀 사이드바 레이아웃 (검색창 최상단화 및 실시간 동적 버튼 연동) ---
 with st.sidebar:
     st.header("🔍 균형 잡힌 뉴스 읽기")
     
+    # 1. 메인 검색 폼 입력 구역
     with st.form(key='news_input_form', clear_on_submit=False):
         input_h = st.text_input("📝 뉴스 제목 입력", value=st.session_state.input_headline)
         input_s = st.text_input("🏢 신문사 / 출처", value=st.session_state.input_source)
         submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
 
     st.markdown("---")
+    
+    # 2. 귀찮음 해소용 빠른 추천 구역 (실시간 데이터 연동)
     st.subheader("💡 입력하기 귀찮으신가요?")
     
-    if st.button("🎲 오늘의 랜덤 뉴스 추천"):
+    if st.button("🎲 실시간 랜덤 뉴스 추천"):
         picked = random.choice(HOT_ISSUES)
         st.session_state.input_headline = picked['title']
         st.session_state.input_source = picked['source']
-        st.toast("랜덤 뉴스가 입력창에 채워졌습니다!")
+        st.toast("실시간 랜덤 뉴스가 입력창에 채워졌습니다!")
         st.rerun()
 
-    st.markdown("👇 **아래 트렌드 뉴스를 클릭하면 자동 입력됩니다.**")
+    st.markdown("👇 **아래 실시간 트렌드를 클릭하면 자동 입력됩니다.**")
     for issue in HOT_ISSUES:
-        # [이전 피드백 반영] 마우스 올리면(help) 전체 제목이 말풍선 툴팁으로 뜨도록 보완 ⭐
         if st.button(f"🔥 {issue['title'][:18]}...", key=issue['title'], help=issue['title']):
             st.session_state.input_headline = issue['title']
             st.session_state.input_source = issue['source']
@@ -154,12 +186,16 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
-    metrics_data = {"점수 범위": ["1~3점", "4~7점", "8~10점"], "시선 편향도": ["🟢 객관적/중립적", "🟡 은근한 시선 유도", "🔴 특정 진영 편중"], "제목 자극성": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성/선동"]}
+    metrics_data = {
+        "점수 범위": ["1~3점", "4~7점", "8~10점"], 
+        "시선 편향도": ["🟢 객관적/중립적", "🟡 은근한 시선 유도", "🔴 특정 진영 편중"], 
+        "제목 자극성": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성/선동"]
+    }
     st.table(pd.DataFrame(metrics_data))
 
-# --- 3. 분석 실행 및 출력 ---
+# --- 4. 분석 실행 가동 제어 ---
 try: api_key = st.secrets["OPENAI_API_KEY"]
-except: st.error("🚨 Secrets 설정 필요"); st.stop()
+except: st.error("🚨 Secrets에 OPENAI_API_KEY 설정이 필요합니다."); st.stop()
 
 if submit_button:
     if not input_h or not input_s:
@@ -181,13 +217,15 @@ if submit_button:
             st.session_state.analytics_history.append(new_record)
         st.rerun()
 
-# --- 대시보드 레이아웃 ---
+# --- 5. 메인 화면 대시보드 레이아웃 출력 구역 ---
 if st.session_state.analytics_history:
     result_df = pd.DataFrame(st.session_state.analytics_history)
+    
     col1, col2, col3 = st.columns(3)
     col1.metric("📊 분석 뉴스", f"{len(result_df)} 건")
     col2.metric("👓 평균 편향도", f"{result_df['시선 편향도'].mean():.1f} / 10")
     col3.metric("🎣 평균 자극성", f"{result_df['제목 자극성'].mean():.1f} / 10")
+    
     st.markdown("---")
     st.subheader("📋 뉴스 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 대기'))
@@ -199,22 +237,21 @@ if st.session_state.analytics_history:
     fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     k_font = fm.FontProperties(fname=font_path) if os.path.exists(font_path) else None
     
-    # 🌟 [FutureWarning 해결] hue를 x값과 동일하게 주고 legend=False 처리!
-    # 그래프 1: 편향도
+    # 챠트 1: 편향도 통계
     bias_data = result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='시선 편향도', data=bias_data, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
     axes[0].set_title('신문사별 평균 시선 편향도', fontproperties=k_font, fontsize=12)
     axes[0].set_xlabel('언론사/출처', fontproperties=k_font)
     axes[0].set_ylabel('시선 편향도', fontproperties=k_font)
     
-    # 그래프 2: 자극성
+    # 챠트 2: 자극성 통계
     bait_data = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
     sns.barplot(x='언론사/출처', y='제목 자극성', data=bait_data, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
     axes[1].set_title('신문사별 평균 제목 자극성', fontproperties=k_font, fontsize=12)
     axes[1].set_xlabel('언론사/출처', fontproperties=k_font)
     axes[1].set_ylabel('제목 자극성', fontproperties=k_font)
     
-    # 🌟 [UserWarning 해결] 축 눈금 글자 폰트까지 싹 잡아 한글 안 깨지게 방어
+    # 축 눈금 인코딩 강제 매핑으로 한글 깨짐 방어 완료
     for ax in axes:
         if k_font:
             for t in ax.get_xticklabels(): t.set_fontproperties(k_font)
@@ -223,28 +260,67 @@ if st.session_state.analytics_history:
     st.pyplot(fig)
 
     st.markdown("---")
-    st.subheader("🕵️‍♂️ AI의 정밀 진단 소견")
+    
+    # 📡 [집단지성 피드백 연동 레이어]
+    st.subheader("🕵️‍♂️ AI의 정밀 진단 소견 및 집단지성 피드백")
     recent = result_df.tail(3).iloc[::-1]
     tabs = st.tabs([f"⏱️ {i+1}번째 분석 뉴스" for i in range(len(recent))])
+    
+    # 원격 저장소의 data.csv를 실시간 파싱하여 다른 참여자 응답 추출
+    try:
+        token = st.secrets["github"]["token"]
+        repo = st.secrets["github"]["repo"]
+        csv_url = f"https://raw.githubusercontent.com/{repo}/main/data.csv"
+        db_res = requests.get(csv_url, headers={"Authorization": f"token {token}"})
+        global_df = pd.read_csv(io.StringIO(db_res.text)) if db_res.status_code == 200 else pd.DataFrame()
+    except:
+        global_df = pd.DataFrame()
+
     for idx, (o_idx, row) in enumerate(recent.iterrows()):
+        key = row['뉴스 헤드라인']
         with tabs[idx]:
-            c1, c2 = st.columns([1, 3])
+            c1, c2 = st.columns([1.5, 3])
             with c1:
                 st.write(f"**🏢 {row['언론사/출처']}**")
                 st.write(f"편향도: `{row['시선 편향도']}` | 자극성: `{row['제목 자극성']}`")
-                key = row['뉴스 헤드라인']
+                st.markdown("---")
+                
+                # 타 유저 피드백 집계 출력
+                st.markdown("👥 **다른 사람들의 피드백 통계**")
+                if not global_df.empty and '뉴스 제목' in global_df.columns:
+                    same_news = global_df[global_df['뉴스 제목'] == key]
+                    if len(same_news) > 0:
+                        likes = len(same_news[same_news['유저 피드백'] == '공감'])
+                        dislikes = len(same_news[same_news['유저 피드백'] == '비공감'])
+                        total = likes + dislikes
+                        if total > 0:
+                            st.info(f"이 뉴스는 총 **{total}명**이 평가했습니다.  \n"
+                                    f"▶️ 👍 공감해요: `{likes}명` ({likes/total*100:.1f}%)  \n"
+                                    f"▶️ 👎 글쎄요: `{dislikes}명` ({dislikes/total*100:.1f}%)")
+                        else: st.caption("아직 버튼 피드백을 남긴 유저가 없습니다.")
+                    else: st.caption("이 뉴스를 분석한 첫 번째 주자입니다! 🥇")
+                else: st.caption("⏳ 데이터베이스 연결을 확인 중입니다.")
+                
+                st.markdown("---")
+                st.write("**🤖 당신의 분석 의견은 어떤가요?**")
+                
                 if st.session_state.feedback_dict.get(key) is None:
-                    if st.button("👍 공감해요", key=f"L_{o_idx}"):
-                        st.session_state.feedback_dict[key] = "공감"
-                        save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "공감")
-                        st.rerun()
-                    if st.button("👎 글쎄요", key=f"D_{o_idx}"):
-                        st.session_state.feedback_dict[key] = "비공감"
-                        save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감")
-                        st.rerun()
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        if st.button("👍 공감해요", key=f"L_{o_idx}"):
+                            st.session_state.feedback_dict[key] = "공감"
+                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "공감")
+                            st.toast("피드백이 수집되었습니다! 통계가 실시간 갱신됩니다.")
+                            st.rerun()
+                    with col_b2:
+                        if st.button("👎 글쎄요", key=f"D_{o_idx}"):
+                            st.session_state.feedback_dict[key] = "비공감"
+                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감")
+                            st.toast("피드백이 수집되었습니다! 통계가 실시간 갱신됩니다.")
+                            st.rerun()
                 else: st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
             with c2:
                 st.info(row['AI의 미디어 가이드 분석 소견'])
                 st.warning(row['추천 피드 오염 위험 요약'])
 else:
-    st.info("👋 왼쪽 사이드바에서 뉴스를 직접 입력하거나 '랜덤 뉴스 추천'을 클릭해 분석을 시작해보세요!")
+    st.info("👋 왼쪽 사이드바에서 뉴스를 직접 입력하거나 아래의 '실시간 트렌드 메뉴'를 클릭해 분석을 시작해보세요!")
