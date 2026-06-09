@@ -8,6 +8,8 @@ import requests
 from datetime import datetime
 import io
 import random
+import os
+import matplotlib.font_manager as fm
 
 # --- 0. 스타일 및 디자인 세팅 ---
 import matplotlib as mpl
@@ -102,7 +104,7 @@ st.warning("""
 🚨 **[데이터 수집 안내]** 분석 결과 하단에서 **공감/글쎄요** 버튼을 누르시면 해당 데이터가 연구용 DB(GitHub)로 실시간 전송됩니다. 성실한 참여 부탁드립니다!
 """)
 
-# --- 🚀 [추가 기능] 귀찮음 해결을 위한 '트렌드 뉴스' 데이터베이스 ---
+# 트렌드 뉴스 데이터베이스
 HOT_ISSUES = [
     {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
     {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
@@ -112,31 +114,37 @@ HOT_ISSUES = [
     {"title": "포털 알고리즘이 우리 사회를 분열시키는 방법", "source": "네이바 뉴스"}
 ]
 
+# --- 🚀 사이드바 레이아웃 (검색/입력창을 맨 위로 올림) ---
 with st.sidebar:
-    st.header("🔍 분석할 뉴스 가져오기")
+    st.header("🔍 균형 잡힌 뉴스 읽기")
     
-    # 🌟 1. 무작위 추천 기능
-    if st.button("🎲 오늘의 랜덤 뉴스 추천"):
-        picked = random.choice(HOT_ISSUES)
-        st.session_state.input_headline = picked['title']
-        st.session_state.input_source = picked['source']
-        st.toast("랜덤 뉴스가 입력되었습니다!")
-
-    # 🌟 2. 원클릭 트렌드 뉴스 분석 목록
-    st.subheader("🔥 실시간 트렌드 뉴스 (클릭 시 입력)")
-    for issue in HOT_ISSUES:
-        if st.button(f"📰 {issue['title'][:18]}...", key=issue['title']):
-            st.session_state.input_headline = issue['title']
-            st.session_state.input_source = issue['source']
-            st.toast("선택한 뉴스가 입력되었습니다!")
-
-    st.markdown("---")
-    
-    # 폼 입력창 (세션 상태와 연동하여 자동으로 값이 채워짐)
+    # ⚡ [변경 사항] 입력 폼을 가장 최상단으로 올렸습니다.
     with st.form(key='news_input_form', clear_on_submit=False):
         input_h = st.text_input("📝 뉴스 제목 입력", value=st.session_state.input_headline)
         input_s = st.text_input("🏢 신문사 / 출처", value=st.session_state.input_source)
         submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
+
+    st.markdown("---")
+    
+    # 💡 [변경 사항] 입력하기 귀찮은 유저들을 위한 도우미 버튼들이 그 아래에 위치합니다.
+    st.subheader("💡 입력하기 귀찮으신가요?")
+    
+    # 🎲 1. 무작위 추천 기능
+    if st.button("🎲 오늘의 랜덤 뉴스 추천"):
+        picked = random.choice(HOT_ISSUES)
+        st.session_state.input_headline = picked['title']
+        st.session_state.input_source = picked['source']
+        st.toast("랜덤 뉴스가 입력창에 채워졌습니다!")
+        st.rerun() # 값을 폼에 즉시 동기화하기 위해 리런 추가
+
+    # 📰 2. 원클릭 트렌드 뉴스 분석 목록
+    st.markdown("👇 **아래 트렌드 뉴스를 클릭하면 자동 입력됩니다.**")
+    for issue in HOT_ISSUES:
+        if st.button(f"🔥 {issue['title'][:18]}...", key=issue['title']):
+            st.session_state.input_headline = issue['title']
+            st.session_state.input_source = issue['source']
+            st.toast("선택한 뉴스가 입력창에 채워졌습니다!")
+            st.rerun() # 값을 폼에 즉시 동기화하기 위해 리런 추가
 
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
