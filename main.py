@@ -158,7 +158,7 @@ if 'analytics_history' not in st.session_state: st.session_state.analytics_histo
 if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
 st.warning("""
-🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 서비스는 뉴스의 시선 편향도를 분석하여 당신의 미디어 리터러시를 돕습니다.
+🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 프로젝트는 뉴스의 시선 편향도를 분석하여 당신의 이해를 돕습니다.
 
 ---
 🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
@@ -302,7 +302,7 @@ if st.session_state.analytics_history:
                             st.info(f"이 뉴스는 총 **{total}명**이 평가했습니다.  \n"
                                     f"▶️ 👍 공감해요: `{likes}명` ({likes/total*100:.1f}%)  \n"
                                     f"▶️ 👎 글쎄요: `{dislikes}명` ({dislikes/total*100:.1f}%)")
-                        else: st.caption("아직 버튼 피드백을 남긴 유저가 없습니다.")
+                        else: st.caption("아직 피드백을 남긴 유저가 없습니다.")
                     else: st.caption("이 뉴스를 분석한 첫 번째 주자입니다! 🥇")
                 else: st.caption("⏳ 데이터베이스 연결을 확인 중입니다.")
                 
