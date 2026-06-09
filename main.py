@@ -200,6 +200,7 @@ if 'input_source' not in st.session_state: st.session_state.input_source = ""
 if 'analytics_history' not in st.session_state: st.session_state.analytics_history = []
 if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
+# 🌟 메인 화면 안내 구역: 안내 가이드 유지
 st.warning("""
 🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 프로젝트는 뉴스의 시선 편향도를 분석하여 당신의 이해를 돕습니다.
 
@@ -259,14 +260,13 @@ with st.sidebar:
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
     
-    # 🌟 [사이드바 마크다운 표 보정] 
-    st.markdown("""
-| 점수 범위 | 시선 편향도 | 제목 자극성 |
-| :--- | :--- | :--- |
-| **1~3점** | 🟢 **객관적 / 중립적** | 🟢 **담백한 사실 전달** |
-| **4~7점** | 🟡 **은근한 시선 유도** | 🟡 **호기심 유발 유도** |
-| **8~10점** | 🔴 **특정 진영 편중** | 🔴 **낚시성 / 선동** |
-""")
+    # 🛠️ [사이드바 복구] 표가 안 나오던 문제를 해결하기 위해 st.dataframe으로 안전하게 다시 노출합니다.
+    criteria_df = pd.DataFrame({
+        "점수 범위": ["1~3점", "4~7점", "8~10점"],
+        "시선 편향도 평가": ["🟢 객관적 / 중립적", "🟡 은근한 시선 유도", "🔴 특정 진영 편중"],
+        "제목 자극성 평가": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성 / 프레임 선동"]
+    })
+    st.dataframe(criteria_df, hide_index=True)
 
 # --- 4. 분석 실행 가동 제어 ---
 try: api_key = st.secrets["OPENAI_API_KEY"]
@@ -325,18 +325,20 @@ if st.session_state.analytics_history:
     st.subheader("📋 뉴스 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 대기'))
     
-    # 🛠️ [메인 화면 표 버그 박멸: st.dataframe 철거 및 마크다운 테이블 빌더 도입]
-    # 컴포넌트 렌더링 한계를 깨부수고 모바일 가독성 및 이모지 무결성을 완벽하게 보장합니다.
-    md_table = "| 🏢 언론사/출처 | 📰 뉴스 헤드라인 | 👓 편향도 | 🎣 자극성 | 👥 피드백 |\n"
-    md_table += "| :--- | :--- | :---: | :---: | :---: |\n"
-    for _, row in result_df.iterrows():
-        # 점수대에 맞는 이모지 마크다운 동적 생성 (모바일 및 대시보드 시각화 완벽 호환)
-        b_emoji = "🟢" if row['시선 편향도'] <= 3 else ("🟡" if row['시선 편향도'] <= 7 else "🔴")
-        c_emoji = "🟢" if row['제목 자극성'] <= 3 else ("🟡" if row['제목 자극성'] <= 7 else "🔴")
-        
-        md_table += f"| {row['언론사/출처']} | {row['뉴스 헤드라인']} | {b_emoji} **{row['시선 편향도']}**점 | {c_emoji} **{row['제목 자극성']}**점 | `{row['유저 피드백']}` |\n"
-    
-    st.markdown(md_table)
+    # 🛠️ [메인 화면 표 구조 완벽 복구]
+    # 요청하신 표(st.dataframe) 형식을 온전히 복구했으며, 표 내부 셀의 문자열 오작동이 없도록 렌더링 방식을 정교화했습니다.
+    st.dataframe(
+        result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '유저 피드백']], 
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "언론사/출처": st.column_config.TextColumn("🏢 언론사/출처"),
+            "뉴스 헤드라인": st.column_config.TextColumn("📰 뉴스 헤드라인"),
+            "시선 편향도": st.column_config.NumberColumn("👓 시선 편향도 (1-10)", format="%d점"),
+            "제목 자극성": st.column_config.NumberColumn("🎣 제목 자극성 (1-10)", format="%d점"),
+            "유저 피드백": st.column_config.TextColumn("👥 유저 피드백 평가")
+        }
+    )
     
     st.markdown("---")
     st.subheader("📊 매체별 편향성 통계")
