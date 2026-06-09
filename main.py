@@ -31,8 +31,8 @@ if os.path.exists(font_path):
 
 sns.set_theme(style="whitegrid")
 
-# --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 ---
-def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
+# --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 (서술 피드백 확장 🌟) ---
+def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, user_comment=""):
     try:
         GITHUB_TOKEN = st.secrets["github"]["token"]
         REPO_NAME = st.secrets["github"]["repo"]
@@ -42,7 +42,17 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         
         res = requests.get(url, headers=headers)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_row = pd.DataFrame([{"날짜": current_time, "뉴스 제목": headline, "신문사": source, "시선 편향도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback}])
+        
+        # 🌟 새 데이터 적재 행에 '유저 상세 의견' 항목을 추가했습니다.
+        new_row = pd.DataFrame([{
+            "날짜": current_time, 
+            "뉴스 제목": headline, 
+            "신문사": source, 
+            "시선 편향도": bias_risk, 
+            "제목 자극성": clickbait_risk, 
+            "유저 피드백": feedback,
+            "유저 상세 의견": user_comment if user_comment else "작성 안 함"
+        }])
         
         if res.status_code == 200:
             file_data = res.json()
@@ -50,6 +60,11 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
             from base64 import b64decode
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
             old_df = pd.read_csv(io.StringIO(existing_content))
+            
+            # 기존 구버전 CSV 파일에 해당 컬럼이 없을 경우를 대비한 자동 예외 보정
+            if "유저 상세 의견" not in old_df.columns:
+                old_df["유저 상세 의견"] = "작성 안 함"
+                
             updated_df = pd.concat([old_df, new_row], ignore_index=True)
         else:
             sha = None
@@ -59,13 +74,13 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         updated_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
         from base64 import b64encode
         content_encoded = b64encode(csv_buffer.getvalue().encode("utf-8-sig")).decode("utf-8")
-        put_data = {"message": "🔥 데이터 적재", "content": content_encoded}
+        put_data = {"message": "🔥 데이터 적재 (유저 상세 의견 포함)", "content": content_encoded}
         if sha: put_data["sha"] = sha
         requests.put(url, headers=headers, json=put_data)
         return True
     except: return False
 
-# --- 1. GPT 분석 엔진 (요청하신 소제목 명칭 반영 🌟) ---
+# --- 1. GPT 분석 엔진 (유저의 상세 코멘트 오답노트 학습 적용 🌟) ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
@@ -74,12 +89,14 @@ class AdvancedEthicsAnalyzer:
         feedback_learning_prompt = ""
         if learning_context:
             feedback_learning_prompt = f"""
-            [⚠️ 중요 피드백 기반 학습 사항]
-            최근 유저들이 당신의 과거 분석 중 아래와 같은 기사 분석들에 대해 '비공감(별로에요)' 의견을 남겼습니다.
-            과거 실패 리스트:
+            [⚠️ 중요 유저 피드백 및 상세 코멘트 자가 학습 사항]
+            과거 당신의 뉴스 편향 분석 결과에 대해 유저들이 아래와 같은 실망 섞인 코멘트와 함께 '비공감(별로에요)' 의견을 남겼습니다.
+            이 오답노트 내용을 철저히 분석해서, 유저가 왜 당신의 판단에 실망했는지 파악하고 이번 분석에 강력히 반영하세요.
+            
+            수정해야 할 과거 분석 실패 사례와 유저들의 생생한 한 줄 평 리스트:
             {learning_context}
             
-            따라서 이번 분석에서는 과거처럼 너무 뻔하거나 기계적인 분석을 지양하고, 해당 뉴스 제목이 가진 교묘한 뉘앙스를 한층 더 날카롭고 유용하게 짚어내야 합니다.
+            위 유저 피드백을 토대로, 이번 분석에서는 기계적이거나 수박 겉핥기식 분석을 탈피하여 왜 이 뉴스가 그렇게 분석되었는지 맥락을 날카롭고 유용하게 파고들어야 합니다.
             """
 
         prompt = f"""
@@ -97,7 +114,7 @@ class AdvancedEthicsAnalyzer:
         3. 제목 자극성(clickbait_risk, 1-10): 인과관계 생략, 과장된 형용사 사용, 자극적 단어 배치로 독자의 낚시성 클릭을 유도하는지 평가하세요.
         4. 정밀 심층 소견(detailed_reason): 반드시 일반 대중도 직관적으로 이해할 수 있는 비유와 친근한 대화체 문장으로 아래 3가지 테마를 명확히 구분하여 작성하세요.
            - [🕵️‍♂️ 뉴스 속 숨은 의도]: 이 제목이 은근슬쩍 대중에게 어떤 생각이나 프레임을 심어주려고 판을 짜고 있는지 쉽고 친근하게 설명
-           - [🧐 제목 뒤 숨겨진 사실]: 독자의 눈을 가리기 위해 제목에서 일부러 말 안 하거나 구렁이 담 넘어가듯 생략해 버린 진짜 핵심 팩트나 배경 추론
+           - [🧐 제목 뒤 숨겨진 팩트]: 독자의 눈을 가리기 위해 제목에서 일부러 말 안 하거나 구렁이 담 넘어가듯 생략해 버린 진짜 핵심 팩트나 배경 추론
            - [💡 다시 읽어볼까요?]: 이 뉴스를 볼 때 확증 편향이나 낚시에 당하지 않고 중심을 잡기 위해 독자가 가져야 할 유쾌하고 명쾌한 비판적 자세 제안
         
         응답은 반드시 철저하게 아래 JSON 형식을 준수해야 합니다:
@@ -201,7 +218,7 @@ st.warning("""
 🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
 1. 본 서비스는 AI를 활용한 뉴스 데이터 편향 연구 및 분석 과제의 일환으로 운영됩니다.
 2. 분석 결과 하단의 **[🕵️‍♂️ AI의 정밀 진단 소견 및 집단지성 피드백]** 구역에서 **`👍 공감해요`** 또는 **`👎 글쎄요`** 버튼을 꼭 눌러주세요.
-3. **버튼을 누르시는 순간, 입력하신 [뉴스 제목, 신문사, AI 분석 지표, 선택한 피드백] 데이터가 개발자의 데이터베이스(GitHub 저장소)로 안전하게 실시간 전송 및 적재됩니다.**
+3. **버튼을 누르시는 순간, 입력하신 [뉴스 제목, 신문사, AI 분석 지표, 선택한 피드백, 유저 의견(선택)] 데이터가 개발자의 데이터베이스(GitHub 저장소)로 안전하게 실시간 전송 및 적재됩니다.**
 4. 수집된 정보는 통계 분석 목적으로만 활용되며, 개인 식별 정보는 일절 수집되지 않습니다. 신중하고 성실한 피드백 참여에 감사드립니다!
 """)
 
@@ -258,11 +275,17 @@ if submit_button:
     if not input_h or not input_s:
         st.sidebar.warning("입력창을 채워주세요!")
     else:
+        # 🎯 '비공감' 피드백뿐만 아니라 유저가 정성스레 남긴 '유저 상세 의견'이 있다면 함께 오답노트에 주입하여 GPT를 고도화 학습시킵니다.
         learning_context = ""
         if not global_df.empty and '유저 피드백' in global_df.columns:
             disliked_samples = global_df[global_df['유저 피드백'] == '비공감'].tail(5)
             if not disliked_samples.empty:
-                learning_context = "\n".join([f"- 제목: {r['뉴스 뉴스 제목' if '뉴스 뉴스 제목' in global_df.columns else '뉴스 제목']} / 언론사: {r['신문사']}" for _, r in disliked_samples.iterrows()])
+                context_list = []
+                for _, r in disliked_samples.iterrows():
+                    headline_col = r['뉴스 뉴스 제목' if '뉴스 뉴스 제목' in global_df.columns else '뉴스 제목']
+                    comment_val = r.get('유저 상세 의견', '의견 미작성')
+                    context_list.append(f"- 뉴스명: {headline_col} [유저 한줄평: {comment_val}]")
+                learning_context = "\n".join(context_list)
 
         analyzer = AdvancedEthicsAnalyzer(api_key=api_key)
         with st.spinner("⚖️ AI 진단 중..."):
@@ -353,20 +376,24 @@ if st.session_state.analytics_history:
                 st.write("**🤖 당신의 분석 의견은 어떤가요?**")
                 
                 if st.session_state.feedback_dict.get(key) is None:
+                    # 🌟 [선택 사항] 유저가 생각이나 판단 이유를 자유롭게 적을 수 있는 입력창 공간 컴포넌트 추가
+                    user_note = st.text_input("💬 판단하신 이유나 한 줄 평을 남겨주세요 (선택)", key=f"note_{o_idx}", placeholder="예: 분석이 너무 정확해요! / 이 뉴스는 선동에 가까워요.")
+                    
                     col_b1, col_b2 = st.columns(2)
                     with col_b1:
                         if st.button("👍 공감해요", key=f"L_{o_idx}"):
                             st.session_state.feedback_dict[key] = "공감"
-                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "공감")
+                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "공감", user_comment=user_note)
                             st.toast("피드백이 수집되었습니다! 통계가 실시간 갱신됩니다.")
                             st.rerun()
                     with col_b2:
                         if st.button("👎 글쎄요", key=f"D_{o_idx}"):
                             st.session_state.feedback_dict[key] = "비공감"
-                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감")
+                            save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감", user_comment=user_note)
                             st.toast("피드백을 반영했습니다! 다음 분석에 오답노트로 자동 활용됩니다.")
                             st.rerun()
-                else: st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
+                else:
+                    st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
             with c2:
                 st.markdown("### 🔍 AI 심층 진단 리포트")
                 st.markdown(row['AI의 미디어 가이드 분석 소견'])
