@@ -7,8 +7,9 @@ import json
 import requests
 from datetime import datetime
 import io
+import random
 
-# --- 0. 스타일 및 디자인 세팅 (한글/이모지 경고 원천 차단) ---
+# --- 0. 스타일 및 디자인 세팅 ---
 import matplotlib as mpl
 mpl.rcParams['font.family'] = 'sans-serif'
 mpl.rcParams['axes.unicode_minus'] = False
@@ -16,32 +17,22 @@ sns.set_theme(style="whitegrid")
 
 # --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 ---
 def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
-    """유저 피드백 발생 시 깃허브 레포지토리의 data.csv 파일을 갱신하는 함수"""
     try:
         GITHUB_TOKEN = st.secrets["github"]["token"]
         REPO_NAME = st.secrets["github"]["repo"]
         FILE_PATH = "data.csv"
-        
         url = f"https://api.github.com/repos/{REPO_NAME}/contents/{FILE_PATH}"
-        headers = {
-            "Authorization": f"token {GITHUB_TOKEN}",
-            "Accept": "application/vnd.github.v3+json"
-        }
+        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
         
         res = requests.get(url, headers=headers)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        new_row = pd.DataFrame([{
-            "날짜": current_time, "뉴스 제목": headline, "신문사": source, 
-            "시선 편향도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback
-        }])
+        new_row = pd.DataFrame([{"날짜": current_time, "뉴스 제목": headline, "신문사": source, "시선 편향도": bias_risk, "제목 자극성": clickbait_risk, "유저 피드백": feedback}])
         
         if res.status_code == 200:
             file_data = res.json()
             sha = file_data["sha"]
             from base64 import b64decode
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
-            
             old_df = pd.read_csv(io.StringIO(existing_content))
             updated_df = pd.concat([old_df, new_row], ignore_index=True)
         else:
@@ -52,48 +43,36 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         updated_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
         from base64 import b64encode
         content_encoded = b64encode(csv_buffer.getvalue().encode("utf-8-sig")).decode("utf-8")
-        
-        put_data = {
-            "message": "🔥 시스템 실시간 뉴스 데이터 누적 피드백 기록",
-            "content": content_encoded
-        }
-        if sha:
-            put_data["sha"] = sha
-            
+        put_data = {"message": "🔥 데이터 적재", "content": content_encoded}
+        if sha: put_data["sha"] = sha
         requests.put(url, headers=headers, json=put_data)
         return True
-    except Exception as e:
-        print(f"[GitHub Sync Error] {str(e)}")
-        return False
+    except: return False
 
-# --- 1. 미디어 균형 분석 및 오타 자동 정제 GPT 엔진 ---
+# --- 1. GPT 분석 엔진 ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
 
     def analyze_with_gpt(self, headline, source):
         prompt = f"""
-        당신은 사용자가 미디어의 홍수 속에서 '생각의 중심'을 잡도록 돕는 독창적이고 날카로운 미디어 밸런스 가이드이자, 한국어 뉴스 텍스트 정제 전문가입니다.
+        당신은 뉴스 텍스트 정제 전문가이자 미디어 밸런스 가이드입니다.
+        [임무] 
+        1. 신문사명(cleaned_source)과 뉴스 제목(cleaned_headline)의 오타/탈자를 표준 명칭으로 교정하세요.
+        2. 뉴스 제목의 시선 편향도(bias_risk, 1-10)와 제목 자극성(clickbait_risk, 1-10)을 분석하세요.
         
-        [임무 1: 신문사 및 뉴스 헤드라인 오타 자동 정제]
-        1. 사용자가 입력한 [언론사/출처] 문구에 오타, 탈자, 조사, 혹은 파편화된 자모음(예: 한겨ㅈ래, 한결레, 네이바, 조선 일보 등)이 있다면 대한민국 표준 언론사 명칭(예: 한겨레신문, 네이버, 조선일보)으로 알아서 교정하세요.
-        2. 사용자가 입력한 [뉴스 헤드라인] 문구에 오타, 띄어쓰기 오류, 오타성 자모음(예: 백신ㄴ, 대툥령 등)이 있다면 문맥을 고려하여 올바른 한국어 표준 문장 및 단어로 깔끔하게 교정하세요.
-
-        [임무 2: 미디어 프레임 분석]
-        정제된 뉴스 헤드라인이 사용자의 '시선'을 특정 방향으로 편향되게 만들거나, 포털 알고리즘을 한쪽으로 치우치게 만들 위험이 있는지 분석하여 JSON 형식으로 응답하세요.
+        [뉴스 제목]: "{headline}"
+        [신문사]: "{source}"
         
-        [뉴스 헤드라인 (오타 포함 가능)]: "{headline}"
-        [언론사/출처 (오타 포함 가능)]: "{source}"
-        
-        [응답 형식 (JSON)]:
+        응답은 반드시 아래 JSON 형식을 지키세요:
         {{
-            "cleaned_source": "오타와 띄어쓰기가 완벽히 교정된 표준 언론사 명칭 (예: 한겨레신문, 조선일보, 네이버)",
-            "cleaned_headline": "오타 및 맞춤법이 완벽히 교정된 깨끗한 뉴스 제목",
-            "sentiment_score": -1.0에서 1.0 사이의 실수,
-            "bias_risk": 1에서 10 사이의 정수 (시선 편향도),
-            "clickbait_risk": 1에서 10 사이의 정수 (제목 자극성),
-            "detailed_reason": "프레임 분석 및 포털 추천 알고리즘 오염 부작용 설명 (3~4문장)",
-            "one_line_summary": "기사 내용에 매칭되는 위트 있고 날카로운 한 줄 경고 문구"
+            "cleaned_source": "정제된 신문사명",
+            "cleaned_headline": "정제된 뉴스 제목",
+            "sentiment_score": -1.0~1.0 사이 실수,
+            "bias_risk": 1~10 정수,
+            "clickbait_risk": 1~10 정수,
+            "detailed_reason": "분석 소견(3~4문장)",
+            "one_line_summary": "날카로운 한 줄 요약"
         }}
         """
         try:
@@ -105,190 +84,143 @@ class AdvancedEthicsAnalyzer:
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
-            return {
-                "cleaned_source": source, "cleaned_headline": headline,
-                "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, 
-                "detailed_reason": f"분석 중 오류 발생: {str(e)}", "one_line_summary": "⚠️ 분석 실패"
-            }
+            return {"cleaned_source": source, "cleaned_headline": headline, "sentiment_score": 0.0, "bias_risk": 1, "clickbait_risk": 1, "detailed_reason": f"에러: {e}", "one_line_summary": "⚠️ 분석 실패"}
 
-# --- 2. 웹 화면 구성 및 세션 상태 초기화 ---
+# --- 2. 페이지 설정 및 데이터 초기화 ---
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
 st.title("⚖️ 뉴스 편향도 분석기 (News Balance Filter)")
 
-# 📢 첫 화면 안내 및 데이터 전송 경고문 보강 구역 ⭐
+# 세션 상태 초기화 (입력창 자동 채우기용)
+if 'input_headline' not in st.session_state: st.session_state.input_headline = ""
+if 'input_source' not in st.session_state: st.session_state.input_source = ""
+if 'analytics_history' not in st.session_state: st.session_state.analytics_history = []
+if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
+
+# 📢 첫 화면 경고문
 st.warning("""
-🎯 **이 서비스가 왜 필요할까요?** 뉴스를 읽다 보면 나도 모르게 세상에 대한 '색안경'이 끼워지곤 합니다. 한쪽으로 치우친 뉴스를 자꾸 클릭하면, 포털 알고리즘마저 내 피드를 편향된 정보로만 가득 채우게 됩니다.
-
----
-🚨 **[이용자 필수 안내 및 데이터 수집 경고]**
-1. 본 서비스는 AI를 활용한 뉴스 데이터 편향 연구 및 분석 과제의 일환으로 운영됩니다.
-2. 분석 결과 하단의 **[🕵️‍♂️ AI의 정밀 진단 소견]** 탭에서 **`👍 공감해요`** 또는 **`👎 글쎄요`** 버튼을 반드시 눌러주세요. 
-3. **버튼을 누르시는 순간, 입력하신 [뉴스 제목, 신문사, AI 분석 결과, 피드백 종류] 데이터가 개발자의 데이터베이스(GitHub 저장소)로 안전하게 실시간 전송 및 적재됩니다.** 
-4. 수집된 데이터는 통계 분석 목적 이외에는 절대 사용되지 않으며, 개인정보는 수집하지 않습니다. 신중하고 성실한 피드백 참여를 부탁드립니다!
+🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 서비스는 뉴스의 시선 편향도를 분석하여 당신의 미디어 리터러시를 돕습니다.
+🚨 **[데이터 수집 안내]** 분석 결과 하단에서 **공감/글쎄요** 버튼을 누르시면 해당 데이터가 연구용 DB(GitHub)로 실시간 전송됩니다. 성실한 참여 부탁드립니다!
 """)
-st.markdown("---")
 
-try:
-    api_key = st.secrets["OPENAI_API_KEY"]
-except Exception:
-    st.error("🚨 `Secrets`에 `OPENAI_API_KEY`를 설정해 주세요.")
-    st.stop()
-
-if 'analytics_history' not in st.session_state:
-    st.session_state.analytics_history = []
-if 'feedback_dict' not in st.session_state:
-    st.session_state.feedback_dict = {}
+# --- 🚀 [추가 기능] 귀찮음 해결을 위한 '트렌드 뉴스' 데이터베이스 ---
+HOT_ISSUES = [
+    {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
+    {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
+    {"title": "금리 동결 결정에 영끌족 한숨, 부동산 시장 어디로?", "source": "조선 일보"},
+    {"title": "AI 반도체 전쟁, 한국 기업들의 생존 전략은?", "source": "매일 경제"},
+    {"title": "기후 위기 현실화, 올여름 역대급 폭염 예고", "source": "SBS 뉴스"},
+    {"title": "포털 알고리즘이 우리 사회를 분열시키는 방법", "source": "네이바 뉴스"}
+]
 
 with st.sidebar:
-    st.header("🔍 균형 잡힌 뉴스 읽기")
-    with st.form(key='news_input_form', clear_on_submit=True):
-        input_headline = st.text_input("📝 뉴스 제목 입력")
-        input_source = st.text_input("🏢 신문사 / 출처")
-        submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
+    st.header("🔍 분석할 뉴스 가져오기")
     
+    # 🌟 1. 무작위 추천 기능
+    if st.button("🎲 오늘의 랜덤 뉴스 추천"):
+        picked = random.choice(HOT_ISSUES)
+        st.session_state.input_headline = picked['title']
+        st.session_state.input_source = picked['source']
+        st.toast("랜덤 뉴스가 입력되었습니다!")
+
+    # 🌟 2. 원클릭 트렌드 뉴스 분석 목록
+    st.subheader("🔥 실시간 트렌드 뉴스 (클릭 시 입력)")
+    for issue in HOT_ISSUES:
+        if st.button(f"📰 {issue['title'][:18]}...", key=issue['title']):
+            st.session_state.input_headline = issue['title']
+            st.session_state.input_source = issue['source']
+            st.toast("선택한 뉴스가 입력되었습니다!")
+
+    st.markdown("---")
+    
+    # 폼 입력창 (세션 상태와 연동하여 자동으로 값이 채워짐)
+    with st.form(key='news_input_form', clear_on_submit=False):
+        input_h = st.text_input("📝 뉴스 제목 입력", value=st.session_state.input_headline)
+        input_s = st.text_input("🏢 신문사 / 출처", value=st.session_state.input_source)
+        submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
+
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
-    metrics_data = {
-        "점수 범위": ["1 ~ 3점", "4 ~ 7점", "8 ~ 10점"],
-        "시선 편향도 상태": ["🟢 괜찮아요", "🟡 약한 편향성", "🔴 특정 시각 편중"],
-        "제목 자극성 상태": ["🟢 괜찮아요", "🟡 호기심 유도", "🔴 어그로성 선동"]
-    }
-    metrics_df = pd.DataFrame(metrics_data)
-    st.table(metrics_df)
-    st.caption("※ 본 지표는 GPT-4o 분석 엔진 기반의 미디어 언어 프레임 검구 결과치입니다.")
+    metrics_data = {"점수 범위": ["1~3점", "4~7점", "8~10점"], "시선 편향도": ["🟢 객관적/중립적", "🟡 은근한 시선 유도", "🔴 특정 진영 편중"], "제목 자극성": ["🟢 담백한 사실 전달", "🟡 호기심 유발 유도", "🔴 낚시성/선동"]}
+    st.table(pd.DataFrame(metrics_data))
+
+# --- 3. 분석 실행 및 출력 ---
+try: api_key = st.secrets["OPENAI_API_KEY"]
+except: st.error("🚨 Secrets 설정 필요"); st.stop()
 
 if submit_button:
-    if not input_headline or not input_source:
-        st.sidebar.warning("뉴스 제목 and 신문사를 모두 입력해 주세요!")
+    if not input_h or not input_s:
+        st.sidebar.warning("입력창을 채워주세요!")
     else:
         analyzer = AdvancedEthicsAnalyzer(api_key=api_key)
-        with st.spinner("⚖️ AI가 뉴스를 진단 중입니다..."):
-            gpt_res = analyzer.analyze_with_gpt(input_headline, input_source)
-            
-            ai_cleaned_source = gpt_res.get('cleaned_source', input_source)
-            ai_cleaned_headline = gpt_res.get('cleaned_headline', input_headline)
-            
+        with st.spinner("⚖️ AI 진단 중..."):
+            gpt_res = analyzer.analyze_with_gpt(input_h, input_s)
             new_record = {
-                '뉴스 헤드라인': ai_cleaned_headline, '언론사/출처': ai_cleaned_source,
-                '감성 점수': gpt_res['sentiment_score'], '시선 편향도': gpt_res['bias_risk'], 
-                '제목 자극성': gpt_res['clickbait_risk'], 'AI 미디어 가이드의 분석 소견': gpt_res['detailed_reason'],
+                '뉴스 헤드라인': gpt_res.get('cleaned_headline', input_h),
+                '언론사/출처': gpt_res.get('cleaned_source', input_s),
+                '감성 점수': gpt_res['sentiment_score'],
+                '시선 편향도': gpt_res['bias_risk'],
+                '제목 자극성': gpt_res['clickbait_risk'],
+                'AI의 미디어 가이드 분석 소견': gpt_res['detailed_reason'],
                 '추천 피드 오염 위험 요약': gpt_res['one_line_summary'],
                 '감성 판정': '🟢 긍정적' if gpt_res['sentiment_score'] > 0.1 else ('🔴 부정/갈등' if gpt_res['sentiment_score'] < -0.1 else '🟡 단순 사실')
             }
             st.session_state.analytics_history.append(new_record)
         st.rerun()
 
-# --- 3. 대시보드 출력 레이아웃 ---
+# --- 대시보드 레이아웃 (데이터가 있을 때만 출력) ---
 if st.session_state.analytics_history:
     result_df = pd.DataFrame(st.session_state.analytics_history)
-
-    # 1층: 스코어보드
-    col_m1, col_m2, col_m3 = st.columns(3)
-    with col_m1: st.metric(label="📊 분석한 뉴스", value=f"{len(result_df)} 건")
-    with col_m2: st.metric(label="👓 평균 시선 편향도", value=f"{result_df['시선 편향도'].mean():.1f} / 10.0")
-    with col_m3: st.metric(label="🎣 평균 제목 자극성", value=f"{result_df['제목 자극성'].mean():.1f} / 10.0")
-
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📊 분석 뉴스", f"{len(result_df)} 건")
+    col2.metric("👓 평균 편향도", f"{result_df['시선 편향도'].mean():.1f} / 10")
+    col3.metric("🎣 평균 자극성", f"{result_df['제목 자극성'].mean():.1f} / 10")
     st.markdown("---")
-
-    # 2층: 데이터 테이블
     st.subheader("📋 뉴스 진단 기록")
-    result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 확인 대기'))
-    st.dataframe(
-        result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '감성 판정', '유저 피드백']], 
-        width='stretch', 
-        hide_index=True
-    )
-
+    result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 대기'))
+    st.dataframe(result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '유저 피드백']], width=1200, hide_index=True)
+    
     st.markdown("---")
-
-    # 3층: 통계 그래프
-    st.subheader("📊 매체별 시선 편향 및 자극성 성향")
-    
-    import os
-    import matplotlib.font_manager as fm
-    
+    st.subheader("📊 매체별 편향성 통계")
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
     font_path = "./NanumGothic.ttf"
     if not os.path.exists(font_path):
-        font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf"
-        res = requests.get(font_url)
-        with open(font_path, "wb") as f:
-            f.write(res.content)
-            
+        res = requests.get("https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf")
+        with open(font_path, "wb") as f: f.write(res.content)
     k_font = fm.FontProperties(fname=font_path)
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5)) 
     
-    # --- 왼쪽 그래프: 편향도 ---
-    media_bias = result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index()
-    sns.barplot(x='언론사/출처', y='시선 편향도', data=media_bias, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
-    
-    axes[0].set_title('신문사별 평균 시선 편향도 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
-    axes[0].set_ylabel('편향 점수 (1~10)', fontproperties=k_font, fontsize=11)
-    axes[0].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
-    axes[0].set_ylim(0, 10)
-    for tick in axes[0].get_xticklabels():
-        tick.set_fontproperties(k_font)
-        tick.set_fontsize(10)
-
-    # --- 오른쪽 그래프: 자극성 ---
-    media_bait = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
-    sns.barplot(x='언론사/출처', y='제목 자극성', data=media_bait, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
-    
-    axes[1].set_title('신문사별 평균 제목 자극성 (1-10)', fontproperties=k_font, fontsize=14, fontweight='bold')
-    axes[1].set_ylabel('자극 점수 (1~10)', fontproperties=k_font, fontsize=11)
-    axes[1].set_xlabel('신문사', fontproperties=k_font, fontsize=11)
-    axes[1].set_ylim(0, 10)
-    for tick in axes[1].get_xticklabels():
-        tick.set_fontproperties(k_font)
-        tick.set_fontsize(10)
-    
-    plt.tight_layout()
+    # 그래프 1: 편향도
+    sns.barplot(x='언론사/출처', y='시선 편향도', data=result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index(), ax=axes[0], palette="Oranges_r")
+    axes[0].set_title('신문사별 평균 시선 편향도', fontproperties=k_font)
+    # 그래프 2: 자극성
+    sns.barplot(x='언론사/출처', y='제목 자극성', data=result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index(), ax=axes[1], palette="Purples_r")
+    axes[1].set_title('신문사별 평균 제목 자극성', fontproperties=k_font)
+    for ax in axes:
+        for t in ax.get_xticklabels(): t.set_fontproperties(k_font)
     st.pyplot(fig)
 
     st.markdown("---")
-
-    # 4층: 정밀 보고서 및 깃허브 실시간 푸시 트리거
     st.subheader("🕵️‍♂️ AI의 정밀 진단 소견")
-    recent_records = result_df.tail(3).iloc[::-1]
-    tabs = st.tabs([f"⏱️ {i+1}번째 전 뉴스" for i in range(len(recent_records))])
-    
-    for idx, (original_idx, row) in enumerate(recent_records.iterrows()):
-        headline_key = row['뉴스 헤드라인']
+    recent = result_df.tail(3).iloc[::-1]
+    tabs = st.tabs([f"⏱️ {i+1}번째 분석 뉴스" for i in range(len(recent))])
+    for idx, (o_idx, row) in enumerate(recent.iterrows()):
         with tabs[idx]:
-            col_b1, col_b2 = st.columns([1, 4])
-            with col_b1:
-                st.markdown(f"**🏢 신문사:** {row['언론사/출처']}")
-                st.markdown(f"**시선 편향도:** `{row['시선 편향도']}/10`  \n**제목 자극성:** `{row['제목 자극성']}/10`")
-                st.markdown("---")
-                st.markdown("**🤖 분석에 동의하시나요?**")
-                
-                current_feedback = st.session_state.feedback_dict.get(headline_key, None)
-                if current_feedback is None:
-                    col_f1, col_f2 = st.columns(2)
-                    with col_f1:
-                        if st.button("👍 공감해요", key=f"like_{original_idx}"):
-                            st.session_state.feedback_dict[headline_key] = "👍 공감함"
-                            with st.spinner("데이터 동기화 중..."):
-                                success = save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "👍 공감함")
-                                if success:
-                                    st.success("✅ 저장 완료!")
-                                    import time
-                                    time.sleep(1)
-                            st.rerun()
-                    with col_f2:
-                        if st.button("👎 글쎄요", key=f"dislike_{original_idx}"):
-                            st.session_state.feedback_dict[headline_key] = "👎 동의 안 함"
-                            with st.spinner("데이터 동기화 중..."):
-                                success = save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "👎 동의 안 함")
-                                if success:
-                                    st.success("✅ 저장 완료!")
-                                    import time
-                                    time.sleep(1)
-                            st.rerun()
-                else:
-                    st.success(f"참여 완료: {current_feedback}")
-            with col_b2:
-                st.markdown(f"📝 **뉴스 제목:** \"{row['뉴스 헤드라인']}\"")
-                st.info(row['AI 미디어 가이드의 분석 소견'])
-                st.warning(f"🎯 {row['추천 피드 오염 위험 요약']}")
+            c1, c2 = st.columns([1, 3])
+            with c1:
+                st.write(f"**🏢 {row['언론사/출처']}**")
+                st.write(f"편향도: `{row['시선 편향도']}` | 자극성: `{row['제목 자극성']}`")
+                key = row['뉴스 헤드라인']
+                if st.session_state.feedback_dict.get(key) is None:
+                    if st.button("👍 공감해요", key=f"L_{o_idx}"):
+                        st.session_state.feedback_dict[key] = "공감"
+                        save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "공감")
+                        st.rerun()
+                    if st.button("👎 글쎄요", key=f"D_{o_idx}"):
+                        st.session_state.feedback_dict[key] = "비공감"
+                        save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감")
+                        st.rerun()
+                else: st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
+            with c2:
+                st.info(row['AI의 미디어 가이드 분석 소견'])
+                st.warning(row['추천 피드 오염 위험 요약'])
 else:
-    st.info("👋 뉴스 제목을 왼쪽 사이드바에 입력하여 뉴스 편향도 분석기를 작동시켜 보세요!")
+    st.info("👋 왼쪽 사이드바에서 뉴스를 직접 입력하거나 '랜덤 뉴스 추천'을 클릭해 분석을 시작해보세요!")
