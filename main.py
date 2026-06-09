@@ -65,27 +65,40 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback):
         return True
     except: return False
 
-# --- 1. GPT 분석 엔진 (프롬프트 및 분석 깊이 대폭 고도화 🌟) ---
+# --- 1. GPT 분석 엔진 (요청하신 소제목 명칭 반영 🌟) ---
 class AdvancedEthicsAnalyzer:
     def __init__(self, api_key):
         self.client = OpenAI(api_key=api_key)
 
-    def analyze_with_gpt(self, headline, source):
+    def analyze_with_gpt(self, headline, source, learning_context=""):
+        feedback_learning_prompt = ""
+        if learning_context:
+            feedback_learning_prompt = f"""
+            [⚠️ 중요 피드백 기반 학습 사항]
+            최근 유저들이 당신의 과거 분석 중 아래와 같은 기사 분석들에 대해 '비공감(별로에요)' 의견을 남겼습니다.
+            과거 실패 리스트:
+            {learning_context}
+            
+            따라서 이번 분석에서는 과거처럼 너무 뻔하거나 기계적인 분석을 지양하고, 해당 뉴스 제목이 가진 교묘한 뉘앙스를 한층 더 날카롭고 유용하게 짚어내야 합니다.
+            """
+
         prompt = f"""
-        당신은 미디어 리터러시 진단 기관의 수석 연구원이자 텍스트 정제 전문가입니다.
-        제공된 뉴스 제목과 언론사를 바탕으로, 단순 표면 분석을 넘어 숨겨진 저의와 프레임워크를 정밀 해부하세요.
+        당신은 미디어 리터러시를 쉽고 재밌게 알려주는 친근한 '뉴스 탐정'이자 텍스트 정제 전문가입니다.
+        제공된 뉴스 제목과 언론사를 바탕으로, 딱딱하고 전문적인 용어 대신 동네 친한 형/누나가 이야기하듯 쉽고 친근하게(해요체, ~요, ~죠 사용) 숨겨진 프레임을 해부해 주세요.
         
         [뉴스 제목]: "{headline}"
         [신문사]: "{source}"
+        
+        {feedback_learning_prompt}
         
         [진단 임무 및 기준]
         1. 텍스트 정제: 신문사명(cleaned_source)과 뉴스 제목(cleaned_headline)의 오타나 불필요한 특수문자를 정제하고 표준 명칭으로 교정하세요.
         2. 시선 편향도(bias_risk, 1-10): 특정 이념, 집단, 진영의 이해관계를 대변하거나 갈등을 부추기는 감정적 어휘가 투영되었는지 평가하세요.
         3. 제목 자극성(clickbait_risk, 1-10): 인과관계 생략, 과장된 형용사 사용, 자극적 단어 배치로 독자의 낚시성 클릭을 유도하는지 평가하세요.
-        4. 정밀 심층 소견(detailed_reason): 반드시 아래의 3가지 핵심 하위 관점을 포함하여 구체적이고 깊이 있게 기술하세요.
-           - [프레이밍 전략]: 언론사가 이 제목을 통해 대중에게 주입하고자 하는 특정 관점이나 프레임 분석
-           - [논리적 공백]: 독자의 판단을 흐리게 만들기 위해 의도적으로 생략하거나 단순화한 핵심 사실 관계 추론
-           - [수용자 가이드]: 이 뉴스를 소비할 때 확증 편향에 빠지지 않기 위해 독자가 견지해야 할 비판적 시선 제시
+        4. 정밀 심층 소견(detailed_reason): 반드시 일반 대중도 직관적으로 이해할 수 있는 비유와 친근한 대화체 문장으로 아래 3가지 테마를 명확히 구분하여 작성하세요.
+           - [🕵️‍♂️ 뉴스 속 숨은 의도]: 이 제목이 은근슬쩍 대중에게 어떤 생각이나 프레임을 심어주려고 판을 짜고 있는지 쉽고 친근하게 설명
+           - [🧐 제목 뒤 숨겨진 사실]: 독자의 눈을 가리기 위해 제목에서 일부러 말 안 하거나 구렁이 담 넘어가듯 생략해 버린 진짜 핵심 팩트나 배경 추론
+           - [💡 다시 읽어볼까요?]: 이 뉴스를 볼 때 확증 편향이나 낚시에 당하지 않고 중심을 잡기 위해 독자가 가져야 할 유쾌하고 명쾌한 비판적 자세 제안
         
         응답은 반드시 철저하게 아래 JSON 형식을 준수해야 합니다:
         {{
@@ -94,8 +107,8 @@ class AdvancedEthicsAnalyzer:
             "sentiment_score": -1.0~1.0 사이 실수,
             "bias_risk": 1~10 정수,
             "clickbait_risk": 1~10 정수,
-            "detailed_reason": "[프레이밍 전략]\\n(분석 내용)\\n\\n[논리적 공백]\\n(분석 내용)\\n\\n[수용자 가이드]\\n(분석 내용)",
-            "one_line_summary": "독자의 확증 편향을 깨부수는 날카로운 한 줄 경고 요약"
+            "detailed_reason": "[🕵️‍♂️ 뉴스 속 숨은 의도]\\n(쉽고 친근한 분석 내용, 해요체로 작성)\\n\\n[🧐 제목 뒤 숨겨진 팩트]\\n(쉽고 친근한 분석 내용, 해요체로 작성)\\n\\n[💡 다시 읽어볼까요?]\\n(쉽고 친근한 분석 내용, 해요체로 작성)",
+            "one_line_summary": "독자의 확증 편향을 깨부수는 위트 있고 날카로운 한 줄 경고 요약"
         }}
         """
         try:
@@ -103,7 +116,7 @@ class AdvancedEthicsAnalyzer:
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
-                temperature=0.3
+                temperature=0.4
             )
             return json.loads(response.choices[0].message.content)
         except Exception as e:
@@ -113,7 +126,7 @@ class AdvancedEthicsAnalyzer:
                 "sentiment_score": 0.0, 
                 "bias_risk": 1, 
                 "clickbait_risk": 1, 
-                "detailed_reason": f"[에러 발생] 분석에 실패했습니다.\n\n원인: {e}", 
+                "detailed_reason": f"[에러 발생] 분석에 실패했어요.\n\n원인: {e}", 
                 "one_line_summary": "⚠️ 분석 실패"
             }
 
@@ -123,7 +136,7 @@ def get_realtime_large_news_pool():
     try:
         url = "https://news.google.com/rss?hl=ko&gl=KR&ceid=KR:ko"
         headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
             "Cache-Control": "max-age=0"
@@ -169,7 +182,6 @@ def get_realtime_large_news_pool():
         {"title": "신작 SF 블록버스터 영화 개봉 첫 주 극장가 압도적 1위", "source": "문화리뷰"}
     ]
 
-# 전체 35개짜리 대형 뉴스 풀 확보!
 TOTAL_NEWS_POOL = get_realtime_large_news_pool()
 HOT_ISSUES = TOTAL_NEWS_POOL[:6]
 
@@ -233,13 +245,28 @@ with st.sidebar:
 try: api_key = st.secrets["OPENAI_API_KEY"]
 except: st.error("🚨 Secrets에 OPENAI_API_KEY 설정이 필요합니다."); st.stop()
 
+try:
+    token = st.secrets["github"]["token"]
+    repo = st.secrets["github"]["repo"]
+    csv_url = f"https://raw.githubusercontent.com/{repo}/main/data.csv"
+    db_res = requests.get(csv_url, headers={"Authorization": f"token {token}"})
+    global_df = pd.read_csv(io.StringIO(db_res.text)) if db_res.status_code == 200 else pd.DataFrame()
+except:
+    global_df = pd.DataFrame()
+
 if submit_button:
     if not input_h or not input_s:
         st.sidebar.warning("입력창을 채워주세요!")
     else:
+        learning_context = ""
+        if not global_df.empty and '유저 피드백' in global_df.columns:
+            disliked_samples = global_df[global_df['유저 피드백'] == '비공감'].tail(5)
+            if not disliked_samples.empty:
+                learning_context = "\n".join([f"- 제목: {r['뉴스 뉴스 제목' if '뉴스 뉴스 제목' in global_df.columns else '뉴스 제목']} / 언론사: {r['신문사']}" for _, r in disliked_samples.iterrows()])
+
         analyzer = AdvancedEthicsAnalyzer(api_key=api_key)
         with st.spinner("⚖️ AI 진단 중..."):
-            gpt_res = analyzer.analyze_with_gpt(input_h, input_s)
+            gpt_res = analyzer.analyze_with_gpt(input_h, input_s, learning_context=learning_context)
             new_record = {
                 '뉴스 헤드라인': gpt_res.get('cleaned_headline', input_h),
                 '언론사/출처': gpt_res.get('cleaned_source', input_s),
@@ -297,15 +324,6 @@ if st.session_state.analytics_history:
     st.subheader("🕵️‍♂️ AI의 정밀 진단 소견 및 집단지성 피드백")
     recent = result_df.tail(3).iloc[::-1]
     tabs = st.tabs([f"⏱️ {i+1}번째 분석 뉴스" for i in range(len(recent))])
-    
-    try:
-        token = st.secrets["github"]["token"]
-        repo = st.secrets["github"]["repo"]
-        csv_url = f"https://raw.githubusercontent.com/{repo}/main/data.csv"
-        db_res = requests.get(csv_url, headers={"Authorization": f"token {token}"})
-        global_df = pd.read_csv(io.StringIO(db_res.text)) if db_res.status_code == 200 else pd.DataFrame()
-    except:
-        global_df = pd.DataFrame()
 
     for idx, (o_idx, row) in enumerate(recent.iterrows()):
         key = row['뉴스 헤드라인']
@@ -346,11 +364,10 @@ if st.session_state.analytics_history:
                         if st.button("👎 글쎄요", key=f"D_{o_idx}"):
                             st.session_state.feedback_dict[key] = "비공감"
                             save_data_to_github(row['뉴스 헤드라인'], row['언론사/출처'], row['시선 편향도'], row['제목 자극성'], "비공감")
-                            st.toast("피드백이 수집되었습니다! 통계가 실시간 갱신됩니다.")
+                            st.toast("피드백을 반영했습니다! 다음 분석에 오답노트로 자동 활용됩니다.")
                             st.rerun()
                 else: st.success(f"참여 완료: {st.session_state.feedback_dict[key]}")
             with c2:
-                # 🌟 우측 진단 소견 칸에 마크다운 형식을 그대로 살려 시각적 가독성 제공
                 st.markdown("### 🔍 AI 심층 진단 리포트")
                 st.markdown(row['AI의 미디어 가이드 분석 소견'])
                 st.markdown("---")
