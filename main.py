@@ -43,7 +43,6 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, u
         res = requests.get(url, headers=headers)
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        # 새 데이터 적재 행에 '유저 상세 의견' 항목 컬럼 추가
         new_row = pd.DataFrame([{
             "날짜": current_time, 
             "뉴스 제목": headline, 
@@ -61,7 +60,6 @@ def save_data_to_github(headline, source, bias_risk, clickbait_risk, feedback, u
             existing_content = b64decode(file_data["content"]).decode("utf-8-sig")
             old_df = pd.read_csv(io.StringIO(existing_content))
             
-            # 구버전 CSV 파일 호환성을 위한 컬럼 자동 보정
             if "유저 상세 의견" not in old_df.columns:
                 old_df["유저 상세 의견"] = "작성 안 함"
                 
@@ -202,7 +200,6 @@ if 'input_source' not in st.session_state: st.session_state.input_source = ""
 if 'analytics_history' not in st.session_state: st.session_state.analytics_history = []
 if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
-# 🌟 메인 화면 안내 구역: 기획 의도 및 서술형 피드백 AI 학습 연동 안내 추가
 st.warning("""
 🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 프로젝트는 뉴스의 시선 편향도를 분석하여 당신의 이해를 돕습니다.
 
@@ -262,7 +259,7 @@ with st.sidebar:
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
     
-    # 🛠️ [사이드바 마크다운 수정] 깨지던 st.table을 지우고 100% 인식되는 순수 마크다운 표로 교체했습니다.
+    # 🌟 [사이드바 마크다운 표 보정] 
     st.markdown("""
 | 점수 범위 | 시선 편향도 | 제목 자극성 |
 | :--- | :--- | :--- |
@@ -288,7 +285,6 @@ if submit_button:
     if not input_h or not input_s:
         st.sidebar.warning("입력창을 채워주세요!")
     else:
-        # 비공감 피드백과 함께 유저가 남긴 정성 코멘트 데이터를 추출하여 GPT 오답노트 컨텍스트 구성
         learning_context = ""
         if not global_df.empty and '유저 피드백' in global_df.columns:
             disliked_samples = global_df[global_df['유저 피드백'] == '비공감'].tail(5)
@@ -329,20 +325,18 @@ if st.session_state.analytics_history:
     st.subheader("📋 뉴스 진단 기록")
     result_df['유저 피드백'] = result_df['뉴스 헤드라인'].apply(lambda x: st.session_state.feedback_dict.get(x, '⏳ 대기'))
     
-    # 🛠️ [모바일 가독성 업그레이드] 
-    # TextColumn 형식을 명시적으로 선언하여, 화면이 좁은 모바일에서도 이모지나 글씨 깨짐 없이 자동 래핑 및 가독성을 확보합니다.
-    st.dataframe(
-        result_df[['언론사/출처', '뉴스 헤드라인', '시선 편향도', '제목 자극성', '유저 피드백']], 
-        width=1200, 
-        hide_index=True,
-        column_config={
-            "언론사/출처": st.column_config.TextColumn("🏢 언론사/출처"),
-            "뉴스 헤드라인": st.column_config.TextColumn("📰 뉴스 헤드라인"),
-            "시선 편향도": st.column_config.TextColumn("👓 시선 편향도"),
-            "제목 자극성": st.column_config.TextColumn("🎣 제목 자극성"),
-            "유저 피드백": st.column_config.TextColumn("👥 유저 피드백")
-        }
-    )
+    # 🛠️ [메인 화면 표 버그 박멸: st.dataframe 철거 및 마크다운 테이블 빌더 도입]
+    # 컴포넌트 렌더링 한계를 깨부수고 모바일 가독성 및 이모지 무결성을 완벽하게 보장합니다.
+    md_table = "| 🏢 언론사/출처 | 📰 뉴스 헤드라인 | 👓 편향도 | 🎣 자극성 | 👥 피드백 |\n"
+    md_table += "| :--- | :--- | :---: | :---: | :---: |\n"
+    for _, row in result_df.iterrows():
+        # 점수대에 맞는 이모지 마크다운 동적 생성 (모바일 및 대시보드 시각화 완벽 호환)
+        b_emoji = "🟢" if row['시선 편향도'] <= 3 else ("🟡" if row['시선 편향도'] <= 7 else "🔴")
+        c_emoji = "🟢" if row['제목 자극성'] <= 3 else ("🟡" if row['제목 자극성'] <= 7 else "🔴")
+        
+        md_table += f"| {row['언론사/출처']} | {row['뉴스 헤드라인']} | {b_emoji} **{row['시선 편향도']}**점 | {c_emoji} **{row['제목 자극성']}**점 | `{row['유저 피드백']}` |\n"
+    
+    st.markdown(md_table)
     
     st.markdown("---")
     st.subheader("📊 매체별 편향성 통계")
@@ -403,7 +397,6 @@ if st.session_state.analytics_history:
                 st.write("**🤖 당신의 분석 의견은 어떤가요?**")
                 
                 if st.session_state.feedback_dict.get(key) is None:
-                    # 💬 유저 상세 한 줄 평 입력 패널
                     user_note = st.text_input("💬 판단하신 이유나 한 줄 평을 남겨주세요 (선택)", key=f"note_{o_idx}", placeholder="예: 분석이 정확해요 / 프레임 왜곡이 심하네요.")
                     
                     col_b1, col_b2 = st.columns(2)
