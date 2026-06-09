@@ -11,10 +11,24 @@ import random
 import os
 import matplotlib.font_manager as fm
 
-# --- 0. 스타일 및 디자인 세팅 ---
-import matplotlib as mpl
-mpl.rcParams['font.family'] = 'sans-serif'
-mpl.rcParams['axes.unicode_minus'] = False
+# --- 0. 스타일 및 디자인 세팅 (한글 폰트 강제 로드 유틸리티) ---
+font_path = "./NanumGothic.ttf"
+if not os.path.exists(font_path):
+    try:
+        res = requests.get("https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf")
+        with open(font_path, "wb") as f:
+            f.write(res.content)
+    except Exception as e:
+        print(f"[Font Download Error] {e}")
+
+# Matplotlib에 폰트 등록 및 시스템 기본 폰트로 강제 설정하여 경고 원천 차단 ⭐
+if os.path.exists(font_path):
+    fm.fontManager.addfont(font_path)
+    prop = fm.FontProperties(fname=font_path)
+    import matplotlib as mpl
+    mpl.rcParams['font.family'] = prop.get_name()
+    mpl.rcParams['axes.unicode_minus'] = False
+
 sns.set_theme(style="whitegrid")
 
 # --- 🛠️ 깃허브 저장소의 CSV 파일에 실시간 누적 저장하는 함수 ---
@@ -92,19 +106,16 @@ class AdvancedEthicsAnalyzer:
 st.set_page_config(layout="wide", page_title="뉴스 생각-중심 필터", page_icon="⚖️")
 st.title("⚖️ 뉴스 편향도 분석기 (News Balance Filter)")
 
-# 세션 상태 초기화 (입력창 자동 채우기용)
 if 'input_headline' not in st.session_state: st.session_state.input_headline = ""
 if 'input_source' not in st.session_state: st.session_state.input_source = ""
 if 'analytics_history' not in st.session_state: st.session_state.analytics_history = []
 if 'feedback_dict' not in st.session_state: st.session_state.feedback_dict = {}
 
-# 📢 첫 화면 경고문
 st.warning("""
 🎯 **알고리즘의 '편식'에서 벗어나세요!** 이 서비스는 뉴스의 시선 편향도를 분석하여 당신의 미디어 리터러시를 돕습니다.
 🚨 **[데이터 수집 안내]** 분석 결과 하단에서 **공감/글쎄요** 버튼을 누르시면 해당 데이터가 연구용 DB(GitHub)로 실시간 전송됩니다. 성실한 참여 부탁드립니다!
 """)
 
-# 트렌드 뉴스 데이터베이스
 HOT_ISSUES = [
     {"title": "의대 증원 갈등 심화, 의료 공백 장기화 조짐", "source": "중앙일보"},
     {"title": "대통령 거부권 행사, 여야 대치 정국 급랭", "source": "한겨레 신문"},
@@ -114,37 +125,32 @@ HOT_ISSUES = [
     {"title": "포털 알고리즘이 우리 사회를 분열시키는 방법", "source": "네이바 뉴스"}
 ]
 
-# --- 🚀 사이드바 레이아웃 (검색/입력창을 맨 위로 올림) ---
 with st.sidebar:
     st.header("🔍 균형 잡힌 뉴스 읽기")
     
-    # ⚡ [변경 사항] 입력 폼을 가장 최상단으로 올렸습니다.
     with st.form(key='news_input_form', clear_on_submit=False):
         input_h = st.text_input("📝 뉴스 제목 입력", value=st.session_state.input_headline)
         input_s = st.text_input("🏢 신문사 / 출처", value=st.session_state.input_source)
         submit_button = st.form_submit_button(label="⚡ 시선 편향도 측정 시작")
 
     st.markdown("---")
-    
-    # 💡 [변경 사항] 입력하기 귀찮은 유저들을 위한 도우미 버튼들이 그 아래에 위치합니다.
     st.subheader("💡 입력하기 귀찮으신가요?")
     
-    # 🎲 1. 무작위 추천 기능
     if st.button("🎲 오늘의 랜덤 뉴스 추천"):
         picked = random.choice(HOT_ISSUES)
         st.session_state.input_headline = picked['title']
         st.session_state.input_source = picked['source']
         st.toast("랜덤 뉴스가 입력창에 채워졌습니다!")
-        st.rerun() # 값을 폼에 즉시 동기화하기 위해 리런 추가
+        st.rerun()
 
-    # 📰 2. 원클릭 트렌드 뉴스 분석 목록
     st.markdown("👇 **아래 트렌드 뉴스를 클릭하면 자동 입력됩니다.**")
     for issue in HOT_ISSUES:
-        if st.button(f"🔥 {issue['title'][:18]}...", key=issue['title']):
+        # [이전 피드백 반영] 마우스 올리면(help) 전체 제목이 말풍선 툴팁으로 뜨도록 보완 ⭐
+        if st.button(f"🔥 {issue['title'][:18]}...", key=issue['title'], help=issue['title']):
             st.session_state.input_headline = issue['title']
             st.session_state.input_source = issue['source']
             st.toast("선택한 뉴스가 입력창에 채워졌습니다!")
-            st.rerun() # 값을 폼에 즉시 동기화하기 위해 리런 추가
+            st.rerun()
 
     st.markdown("---")
     st.header("📊 진단 지표 평가 기준")
@@ -175,7 +181,7 @@ if submit_button:
             st.session_state.analytics_history.append(new_record)
         st.rerun()
 
-# --- 대시보드 레이아웃 (데이터가 있을 때만 출력) ---
+# --- 대시보드 레이아웃 ---
 if st.session_state.analytics_history:
     result_df = pd.DataFrame(st.session_state.analytics_history)
     col1, col2, col3 = st.columns(3)
@@ -189,21 +195,31 @@ if st.session_state.analytics_history:
     
     st.markdown("---")
     st.subheader("📊 매체별 편향성 통계")
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-    font_path = "./NanumGothic.ttf"
-    if not os.path.exists(font_path):
-        res = requests.get("https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Regular.ttf")
-        with open(font_path, "wb") as f: f.write(res.content)
-    k_font = fm.FontProperties(fname=font_path)
     
+    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
+    k_font = fm.FontProperties(fname=font_path) if os.path.exists(font_path) else None
+    
+    # 🌟 [FutureWarning 해결] hue를 x값과 동일하게 주고 legend=False 처리!
     # 그래프 1: 편향도
-    sns.barplot(x='언론사/출처', y='시선 편향도', data=result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index(), ax=axes[0], palette="Oranges_r")
-    axes[0].set_title('신문사별 평균 시선 편향도', fontproperties=k_font)
+    bias_data = result_df.groupby('언론사/출처')['시선 편향도'].mean().reset_index()
+    sns.barplot(x='언론사/출처', y='시선 편향도', data=bias_data, ax=axes[0], palette="Oranges_r", hue='언론사/출처', legend=False)
+    axes[0].set_title('신문사별 평균 시선 편향도', fontproperties=k_font, fontsize=12)
+    axes[0].set_xlabel('언론사/출처', fontproperties=k_font)
+    axes[0].set_ylabel('시선 편향도', fontproperties=k_font)
+    
     # 그래프 2: 자극성
-    sns.barplot(x='언론사/출처', y='제목 자극성', data=result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index(), ax=axes[1], palette="Purples_r")
-    axes[1].set_title('신문사별 평균 제목 자극성', fontproperties=k_font)
+    bait_data = result_df.groupby('언론사/출처')['제목 자극성'].mean().reset_index()
+    sns.barplot(x='언론사/출처', y='제목 자극성', data=bait_data, ax=axes[1], palette="Purples_r", hue='언론사/출처', legend=False)
+    axes[1].set_title('신문사별 평균 제목 자극성', fontproperties=k_font, fontsize=12)
+    axes[1].set_xlabel('언론사/출처', fontproperties=k_font)
+    axes[1].set_ylabel('제목 자극성', fontproperties=k_font)
+    
+    # 🌟 [UserWarning 해결] 축 눈금 글자 폰트까지 싹 잡아 한글 안 깨지게 방어
     for ax in axes:
-        for t in ax.get_xticklabels(): t.set_fontproperties(k_font)
+        if k_font:
+            for t in ax.get_xticklabels(): t.set_fontproperties(k_font)
+            for t in ax.get_yticklabels(): t.set_fontproperties(k_font)
+            
     st.pyplot(fig)
 
     st.markdown("---")
